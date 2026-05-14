@@ -1,0 +1,32 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - platform.gov.uk
+  resources:
+  - jobrequests
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - platform.gov.uk
+  resources:
+  - jobrequests/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - platform.gov.uk
+  resources:
+  - jobrequests/status
+  verbs:
+  - get
+  - patch
+  - update
