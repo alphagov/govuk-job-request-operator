@@ -54,7 +54,5 @@ dockers_v2:
     tags:
       - "v{{ .Version }}"
     platforms:
-      - linux/amd64
       - linux/arm64
     sbom: false
-    #disable: "{{ .IsSnapshot }}"
