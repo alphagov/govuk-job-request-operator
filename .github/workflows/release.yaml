@@ -32,5 +32,5 @@ jobs:
     needs: release
     permissions:
       contents: write
-    secrets:
-      GOVUK_CI_GITHUB_API_TOKEN: ${{ secrets.GOVUK_CI_GITHUB_API_TOKEN }}
+      packages: write
+      id-token: write
