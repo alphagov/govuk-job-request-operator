@@ -56,4 +56,3 @@ dockers_v2:
     platforms:
       - linux/arm64
     sbom: false
-    #disable: "{{ .IsSnapshot }}"
