@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=cnqoj
+
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - make controller-gen
+    - bin/controller-gen rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=crds
+
+
+builds:
+  - main: cmd/main.go
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - arm64
+      - amd64
+    binary: manager
+
+archives:
+  - formats: ["tar.gz"]
+    # this name template makes the OS and Arch compatible with the results of `uname`.
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - crds/*
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+
+release:
+  draft: false
+  use_existing_draft: true
+  replace_existing_artifacts: true
+
+dockers_v2:
+  - dockerfile: goreleaser.Dockerfile
+    images:
+      - "ghcr.io/alphagov/govuk-job-request-operator"
+    tags:
+      - "v{{ .Version }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    sbom: false
+    #disable: "{{ .IsSnapshot }}"
