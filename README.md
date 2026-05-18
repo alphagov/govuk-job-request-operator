@@ -101,6 +101,26 @@ k3d image import controller:latest -c cluster
 kubebuilder edit --plugins=helm/v2-alpha
 ```
 
+## Release a new version
+
+This project uses [Semantic Versioning](https://semver.org/).
+
+To create a new release, use the [Create Versioned Release](https://github.com/alphagov/govuk-job-request-operator/actions/workflows/release.yaml)
+GitHub Actions workflow.
+Select the correct version bump level (patch, minor or major) based on the changes made since the last release.
+
+The release process works as follows:
+
+1. 'Create Versioned Release' is triggered manually
+2. A Git tag is calculated based on the provided version bump level and the latest version number
+3. `goreleaser release --clean` runs, which:
+   1. Builds the operator for macOS and Linux, arm64 and x86
+   2. Generates CRD resources
+   3. Packages up the binary and CRD resources into a .tar.gz
+   4. Creates a GitHub Release with the packaged binary and creates a changelog based on commits since last release
+   5. Builds a container image
+
+
 ## Team
 
 [GOV.UK Platform
