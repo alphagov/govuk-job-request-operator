@@ -28,7 +28,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"platform/JobRequest/test/utils"
+	"publishing.service.gov.uk/govuk-job-request-operator/test/utils"
 )
 
 var (

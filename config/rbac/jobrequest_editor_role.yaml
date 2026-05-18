@@ -14,7 +14,7 @@ metadata:
   name: jobrequest-editor-role
 rules:
 - apiGroups:
-  - platform.gov.uk
+  - platform.publishing.service.gov.uk
   resources:
   - jobrequests
   verbs:
@@ -26,7 +26,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - platform.gov.uk
+  - platform.publishing.service.gov.uk
   resources:
   - jobrequests/status
   verbs:

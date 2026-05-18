@@ -15,7 +15,7 @@ brew install k3d
 ### Custom Resource Definition (CRD)
 
 ```
-apiVersion: platform.gov.uk/v1
+apiVersion: platform.service.publishing.gov.uk/v1
 kind: JobRequest
 metadata:
   labels:
@@ -56,21 +56,6 @@ This will run the controller locally and not in the cluster.
 make run
 ```
 
-2. Create a custom resource
-
-Edit `platform_v1_jobrequest.yaml` to the following:
-
-```
-spec:
-    foo: bar
-```
-
-3. Apply the resource
-
-```
-kubectl apply -k config/samples
-```
-
 ### Run the controller in the cluster
 
 1. Build the controller in a docker image
@@ -91,6 +76,28 @@ imagePullPolicy: IfNotPresent
 
 ```
 k3d image import controller:latest -c cluster
+```
+
+4. Deploy the controller to the cluster
+
+```
+make deploy
+```
+
+### Create an instance of the CRD
+
+```
+cat <<EOF | kubectl apply -f -
+apiVersion: platform.publishing.service.gov.uk/v1
+kind: JobRequest
+metadata:
+  labels:
+    app.kubernetes.io/name: govuk-job-request-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: jobrequest-sample
+spec:
+  foo: bar
+EOF
 ```
 
 ### Generate Helm chart

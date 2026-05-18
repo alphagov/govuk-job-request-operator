@@ -1,9 +1,0 @@
-apiVersion: platform.gov.uk/v1
-kind: JobRequest
-metadata:
-  labels:
-    app.kubernetes.io/name: govuk-job-request-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: jobrequest-sample
-spec:
-  foo: bar

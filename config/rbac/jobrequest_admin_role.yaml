@@ -14,13 +14,13 @@ metadata:
   name: jobrequest-admin-role
 rules:
 - apiGroups:
-  - platform.gov.uk
+  - platform.publishing.service.gov.uk
   resources:
   - jobrequests
   verbs:
   - '*'
 - apiGroups:
-  - platform.gov.uk
+  - platform.publishing.service.gov.uk
   resources:
   - jobrequests/status
   verbs:
