@@ -2,15 +2,13 @@ name: Publish Versioned Release
 on:
   workflow_dispatch:
   workflow_call:
-    secrets:
-      GOVUK_CI_GITHUB_API_TOKEN:
-        required: true
-        description: "GitHub token with permissions to publish to the Homebrew tap"
 jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -24,5 +22,4 @@ jobs:
           version: "2.15.4"
           args: release --clean
         env:
-          GITHUB_PAT_HOMEBREW: ${{ secrets.GOVUK_CI_GITHUB_API_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
