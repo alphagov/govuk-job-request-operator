@@ -19,6 +19,7 @@ package utils
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -41,6 +42,7 @@ func warnError(err error) {
 
 // Run executes the provided command within this context
 func Run(cmd *exec.Cmd) (string, error) {
+
 	dir, _ := GetProjectDir()
 	cmd.Dir = dir
 
@@ -62,7 +64,8 @@ func Run(cmd *exec.Cmd) (string, error) {
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "delete", "-f", url)
+	backgroundContext := context.Background()
+	cmd := exec.CommandContext(backgroundContext, "kubectl", "delete", "-f", url) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -73,8 +76,8 @@ func UninstallCertManager() {
 		"cert-manager-controller",
 	}
 	for _, lease := range kubeSystemLeases {
-		cmd = exec.Command("kubectl", "delete", "lease", lease,
-			"-n", "kube-system", "--ignore-not-found", "--force", "--grace-period=0")
+		cmd := exec.CommandContext(backgroundContext, "kubectl", "delete", "lease", lease,
+			"-n", "kube-system", "--ignore-not-found", "--force", "--grace-period=0") //gosec:disable G204 -- We intentionally want to exec a sub process with a var
 		if _, err := Run(cmd); err != nil {
 			warnError(err)
 		}
@@ -83,18 +86,19 @@ func UninstallCertManager() {
 
 // InstallCertManager installs the cert manager bundle.
 func InstallCertManager() error {
+	backgroundContext := context.Background()
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.Command("kubectl", "apply", "-f", url)
+	cmd := exec.CommandContext(backgroundContext, "kubectl", "apply", "-f", url) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
 	// Wait for cert-manager-webhook to be ready, which can take time if cert-manager
 	// was re-installed after uninstalling on a cluster.
-	cmd = exec.Command("kubectl", "wait", "deployment.apps/cert-manager-webhook",
+	cmd = exec.CommandContext(backgroundContext, "kubectl", "wait", "deployment.apps/cert-manager-webhook",
 		"--for", "condition=Available",
 		"--namespace", "cert-manager",
 		"--timeout", "5m",
-	)
+	) //gosec:disable G204 -- We intentionally want to exec a sub process
 
 	_, err := Run(cmd)
 	return err
@@ -114,7 +118,8 @@ func IsCertManagerCRDsInstalled() bool {
 	}
 
 	// Execute the kubectl command to get all CRDs
-	cmd := exec.Command("kubectl", "get", "crds")
+	backgroundContext := context.Background()
+	cmd := exec.CommandContext(backgroundContext, "kubectl", "get", "crds") //gosec:disable G204 -- We intentionally want to exec a sub process
 	output, err := Run(cmd)
 	if err != nil {
 		return false
@@ -144,7 +149,8 @@ func LoadImageToKindClusterWithName(name string) error {
 	if v, ok := os.LookupEnv("KIND"); ok {
 		kindBinary = v
 	}
-	cmd := exec.Command(kindBinary, kindOptions...)
+	backgroundContext := context.Background()
+	cmd := exec.CommandContext(backgroundContext, kindBinary, kindOptions...) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
 	_, err := Run(cmd)
 	return err
 }
