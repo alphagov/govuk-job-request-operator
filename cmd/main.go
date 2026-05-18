@@ -35,8 +35,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	platformv1 "platform/JobRequest/api/v1"
-	"platform/JobRequest/internal/controller"
+	platformv1 "publishing.service.gov.uk/govuk-job-request-operator/api/v1"
+	"publishing.service.gov.uk/govuk-job-request-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -160,7 +160,7 @@ func main() {
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
-		LeaderElectionID:       "768c8ed3.gov.uk",
+		LeaderElectionID:       "768c8ed3.publishing.service.gov.uk",
 		// LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily
 		// when the Manager ends. This requires the binary to immediately end when the
 		// Manager is stopped, otherwise, this setting is unsafe. Setting this significantly

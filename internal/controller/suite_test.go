@@ -33,7 +33,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	platformv1 "platform/JobRequest/api/v1"
+	platformv1 "publishing.service.gov.uk/govuk-job-request-operator/api/v1"
 	// +kubebuilder:scaffold:imports
 )
 
