@@ -1,0 +1,36 @@
+name: Create Versioned Release
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: 'The semver level of the release'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: |
+          NEW_VERSION=$(scripts/calculate-semver.sh "${{ github.event.inputs.level }}")
+          echo "Calculated new version: $NEW_VERSION"
+          git tag "$NEW_VERSION"
+          echo "Pushing new tag: $NEW_VERSION"
+          git push --tags
+  publish:
+    uses: ./.github/workflows/publish.yaml
+    needs: release
+    permissions:
+      contents: write
+    secrets:
+      GOVUK_CI_GITHUB_API_TOKEN: ${{ secrets.GOVUK_CI_GITHUB_API_TOKEN }}
