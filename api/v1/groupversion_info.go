@@ -16,7 +16,7 @@ limitations under the License.
 
 // Package v1 contains API Schema definitions for the platform v1 API group.
 // +kubebuilder:object:generate=true
-// +groupName=platform.gov.uk
+// +groupName=platform.publishing.service.gov.uk
 package v1
 
 import (
@@ -27,7 +27,7 @@ import (
 var (
 	// SchemeGroupVersion is group version used to register these objects.
 	// This name is used by applyconfiguration generators (e.g. controller-gen).
-	SchemeGroupVersion = schema.GroupVersion{Group: "platform.gov.uk", Version: "v1"}
+	SchemeGroupVersion = schema.GroupVersion{Group: "platform.publishing.service.gov.uk", Version: "v1"}
 
 	// GroupVersion is an alias for SchemeGroupVersion, for backward compatibility.
 	GroupVersion = SchemeGroupVersion
