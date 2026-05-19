@@ -27,7 +27,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	platformv1 "publishing.service.gov.uk/govuk-job-request-operator/api/v1"
+	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 )
 
 var _ = Describe("JobRequest Controller", func() {
@@ -50,6 +50,20 @@ var _ = Describe("JobRequest Controller", func() {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
+					},
+					Spec: platformv1.JobRequestSpec{
+						ContainerFrom: platformv1.JobRequestContainerFrom{
+							PodSpecFrom: platformv1.JobRequestPodSpecFrom{
+								Group: "apps/v1",
+								Kind:  "Deployment",
+								LabelSelector: metav1.LabelSelector{
+									MatchLabels: map[string]string{"app": "example"},
+								},
+							},
+							ContainerName: "example-container",
+						},
+						Command: "echo",
+						Args:    []string{"Hello, World!"},
 					},
 					// TODO(user): Specify other spec details if needed.
 				}
