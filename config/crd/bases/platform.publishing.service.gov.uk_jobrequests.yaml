@@ -17,13 +17,28 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.command
+      name: Command
+      type: string
+    - jsonPath: .spec.args
+      name: Arguments
+      type: string
     - jsonPath: .status.state
       name: State
       type: string
+    - jsonPath: .status.jobName
+      name: Job Name
+      type: string
+    - jsonPath: .status.requestedBy
+      name: Requested By
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
     name: v1
     schema:
       openAPIV3Schema:
-        description: JobRequest is the Schema for the jobrequests API
+        description: JobRequest represents a request to run a command in the cluster.
         properties:
           apiVersion:
             description: |-
@@ -72,10 +87,8 @@ spec:
                         - Deployment
                         type: string
                       labelSelector:
-                        description: |-
-                          A label selector is a label query over a set of resources. The result of matchLabels and
-                          matchExpressions are ANDed. An empty label selector matches all objects. A null
-                          label selector matches no objects.
+                        description: Selector for the resource which contains the
+                          pod spec to use for the job.
                         properties:
                           matchExpressions:
                             description: matchExpressions is a list of label selector
