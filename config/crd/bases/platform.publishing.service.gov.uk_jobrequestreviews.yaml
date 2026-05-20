@@ -1,0 +1,72 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: jobrequestreviews.platform.publishing.service.gov.uk
+spec:
+  group: platform.publishing.service.gov.uk
+  names:
+    kind: JobRequestReview
+    listKind: JobRequestReviewList
+    plural: jobrequestreviews
+    shortNames:
+    - jrr
+    singular: jobrequestreview
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: JobRequestReview is the Schema for the jobrequestreviews API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of JobRequestReview
+            properties:
+              decision:
+                enum:
+                - Approved
+                - Rejected
+                type: string
+              description:
+                description: A description of the review decision.
+                type: string
+              jobRequestName:
+                description: Name of the JobRequest resource being reviewed.
+                type: string
+            required:
+            - decision
+            - jobRequestName
+            type: object
+          status:
+            description: status defines the observed state of JobRequestReview
+            properties:
+              reviewedBy:
+                description: Kubernetes username of the reviewer.
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
