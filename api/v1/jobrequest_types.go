@@ -47,20 +47,7 @@ type JobRequestSpec struct {
 
 // JobRequestStatus defines the observed state of JobRequest.
 type JobRequestStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
-	// For Kubernetes API conventions, see:
-	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
-
-	// conditions represent the current state of the JobRequest resource.
-	// Each condition has a unique type and reflects the status of a specific aspect of the resource.
-	//
-	// Standard condition types include:
-	// - "Available": the resource is fully functional
-	// - "Progressing": the resource is being created or updated
-	// - "Degraded": the resource failed to reach or maintain its desired state
-	//
+	// Name of the Kubernetes Job created for this job request.
 	JobName string `json:"jobName,omitempty"`
 	// +kubebuilder:validation:Enum=Requested;Approved;Rejected;Started;Completed;Failed
 	State string `json:"state,omitempty"`

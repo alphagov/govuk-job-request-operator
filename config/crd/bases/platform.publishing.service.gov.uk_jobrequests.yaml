@@ -138,14 +138,7 @@ spec:
             description: status defines the observed state of JobRequest
             properties:
               jobName:
-                description: |-
-                  conditions represent the current state of the JobRequest resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
+                description: Name of the Kubernetes Job created for this job request.
                 type: string
               requestedBy:
                 description: Kubernetes username of the user who made the job request.
