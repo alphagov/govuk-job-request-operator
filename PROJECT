@@ -22,4 +22,13 @@ resources:
   kind: JobRequest
   path: github.com/alphagov/govuk-job-request-operator/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: publishing.service.gov.uk
+  group: platform
+  kind: JobRequestReview
+  path: github.com/alphagov/govuk-job-request-operator/api/v1
+  version: v1
 version: "3"
