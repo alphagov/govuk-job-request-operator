@@ -1,4 +1,4 @@
-module publishing.service.gov.uk/govuk-job-request-operator
+module github.com/alphagov/govuk-job-request-operator
 
 go 1.25.7
 

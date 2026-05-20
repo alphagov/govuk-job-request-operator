@@ -30,7 +30,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"publishing.service.gov.uk/govuk-job-request-operator/test/utils"
+	"github.com/alphagov/govuk-job-request-operator/test/utils"
 )
 
 // namespace where the project is deployed in

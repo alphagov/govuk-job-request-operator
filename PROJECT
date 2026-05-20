@@ -11,7 +11,7 @@ plugins:
     manifests: dist/install.yaml
     output: dist
 projectName: govuk-job-request-operator
-repo: publishing.service.gov.uk/govuk-job-request-operator
+repo: github.com/alphagov/govuk-job-request-operator
 resources:
 - api:
     crdVersion: v1
@@ -20,6 +20,6 @@ resources:
   domain: publishing.service.gov.uk
   group: platform
   kind: JobRequest
-  path: publishing.service.gov.uk/govuk-job-request-operator/api/v1
+  path: github.com/alphagov/govuk-job-request-operator/api/v1
   version: v1
 version: "3"

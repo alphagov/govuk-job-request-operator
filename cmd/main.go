@@ -35,8 +35,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	platformv1 "publishing.service.gov.uk/govuk-job-request-operator/api/v1"
-	"publishing.service.gov.uk/govuk-job-request-operator/internal/controller"
+	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
+	"github.com/alphagov/govuk-job-request-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
 

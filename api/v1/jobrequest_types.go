@@ -20,19 +20,29 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+type JobRequestPodSpecFrom struct {
+	// +kubebuilder:validation:Enum=apps/v1;
+	Group string `json:"group"`
+	// +kubebuilder:validation:Enum=Deployment;
+	Kind          string               `json:"kind"`
+	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+}
+
+type JobRequestContainerFrom struct {
+	// Where to get the pod spec for the job from.
+	PodSpecFrom JobRequestPodSpecFrom `json:"podSpecFrom"`
+	// The name of the container in the pod spec to use for the job.
+	ContainerName string `json:"containerName"`
+}
 
 // JobRequestSpec defines the desired state of JobRequest
 type JobRequestSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
-	// foo is an example field of JobRequest. Edit jobrequest_types.go to remove/update
-	// +optional
-	Foo *string `json:"foo,omitempty"`
+	// Where to get the container and pod spec for the job from.
+	ContainerFrom JobRequestContainerFrom `json:"containerFrom"`
+	// Command to run in the job.
+	Command string `json:"command"`
+	// Arguments to pass to the command.
+	Args []string `json:"args"`
 }
 
 // JobRequestStatus defines the observed state of JobRequest.
@@ -51,15 +61,19 @@ type JobRequestStatus struct {
 	// - "Progressing": the resource is being created or updated
 	// - "Degraded": the resource failed to reach or maintain its desired state
 	//
-	// The status of each condition is one of True, False, or Unknown.
-	// +listType=map
-	// +listMapKey=type
-	// +optional
-	Conditions []metav1.Condition `json:"conditions,omitempty"`
+	JobName string `json:"jobName,omitempty"`
+	// +kubebuilder:validation:Enum=Requested;Approved;Rejected;Started;Completed;Failed
+	State string `json:"state,omitempty"`
+	// Kubernetes username of the user who made the job request.
+	RequestedBy string `json:"requestedBy,omitempty"`
+	// Name of the JobRequestReview resource that reviewed this job request.
+	ReviewName string `json:"reviewName,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=jr
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 
 // JobRequest is the Schema for the jobrequests API
 type JobRequest struct {
