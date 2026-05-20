@@ -40,6 +40,10 @@ type JobRequestReviewStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=jrr
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Job Request",type=string,JSONPath=`.spec.jobRequestName`
+// +kubebuilder:printcolumn:name="Decision",type=string,JSONPath=`.spec.decision`
+// +kubebuilder:printcolumn:name="Reviewed By",type=string,JSONPath=`.status.reviewedBy`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // JobRequestReview is the Schema for the jobrequestreviews API
 type JobRequestReview struct {
