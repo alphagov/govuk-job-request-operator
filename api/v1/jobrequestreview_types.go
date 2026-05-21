@@ -66,7 +66,3 @@ type JobRequestReviewList struct {
 	metav1.ListMeta `json:"metadata,omitzero"`
 	Items           []JobRequestReview `json:"items"`
 }
-
-func init() {
-	SchemeBuilder.Register(&JobRequestReview{}, &JobRequestReviewList{})
-}

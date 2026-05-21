@@ -7,6 +7,7 @@ rules:
 - apiGroups:
   - platform.publishing.service.gov.uk
   resources:
+  - jobrequestreviews
   - jobrequests
   verbs:
   - create
@@ -19,12 +20,14 @@ rules:
 - apiGroups:
   - platform.publishing.service.gov.uk
   resources:
+  - jobrequestreviews/finalizers
   - jobrequests/finalizers
   verbs:
   - update
 - apiGroups:
   - platform.publishing.service.gov.uk
   resources:
+  - jobrequestreviews/status
   - jobrequests/status
   verbs:
   - get
