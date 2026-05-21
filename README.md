@@ -12,18 +12,51 @@ brew install helm
 brew install k3d
 ```
 
-### Custom Resource Definition (CRD)
+### Custom Resource Definitions (CRDs)
 
-```
-apiVersion: platform.service.publishing.gov.uk/v1
+#### JobRequest
+
+A `JobRequest` represents a request to run a command/job.
+
+```yaml
+apiVersion: platform.publishing.service.gov.uk/v1
 kind: JobRequest
 metadata:
-  labels:
-    app.kubernetes.io/name: govuk-job-request-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: jobrequest-sample
+  name: something
 spec:
-  foo: bar
+  containerFrom:
+    podSpecFrom:
+      group: apps/v1
+      kind: Deployment
+      labelSelector:
+        matchLabels:
+          app: whitehall-admin
+    containerName: app
+  command: rake
+  args: [ "some:task", "some-arg" ]
+status:
+  jobName: jr-something
+  requestedBy: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
+  reviewName: something-approval
+  state: Started
+```
+
+#### JobRequestReview
+
+A `JobRequestReview` is a review of a `JobRequest`.
+It can either be `Approved` or `Rejected`.
+
+```yaml
+apiVersion: platform.publishing.service.gov.uk/v1
+kind: JobRequestReview
+metadata:
+  name: something-approval
+spec:
+  jobRequestName: something
+  decision: Approved
+  description: "LGTM"
+status:
+  reviewedBy: arn:aws:sts::123456789:assumed-role/otheruser.name-platformengineer/environment-platformengineer
 ```
 
 ### Create and generate the manifests
@@ -82,22 +115,6 @@ k3d image import controller:latest -c cluster
 
 ```
 make deploy
-```
-
-### Create an instance of the CRD
-
-```
-cat <<EOF | kubectl apply -f -
-apiVersion: platform.publishing.service.gov.uk/v1
-kind: JobRequest
-metadata:
-  labels:
-    app.kubernetes.io/name: govuk-job-request-operator
-    app.kubernetes.io/managed-by: kustomize
-  name: jobrequest-sample
-spec:
-  foo: bar
-EOF
 ```
 
 ### Generate Helm chart
