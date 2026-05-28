@@ -63,6 +63,12 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
+.PHONY: unit_tests
+unit_tests: test # unit_tests is invoked by the re-usable go-test workflow in .github/workflows/ci.yml
+
+.PHONY: integration_tests
+integration_tests: test-e2e # integration_tests is invoked by the re-usable go-test workflow in .github/workflows/ci.yml
+
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
 # kubectl kuberc is disabled by default for test isolation; enable with:
