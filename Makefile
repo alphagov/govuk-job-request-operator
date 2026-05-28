@@ -61,13 +61,33 @@ vet: ## Run go vet against code.
 
 .PHONY: test
 test: manifests generate fmt vet setup-envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" \
+	go test $$(go list ./... | grep -v /e2e) \
+		-coverprofile cover.out \
+		-cover \
+		-covermode atomic \
+		-race \
+		-args \
+		-test.gocoverdir="${PWD}/coverage/unit"
 
 .PHONY: unit_tests
 unit_tests: test # unit_tests is invoked by the re-usable go-test workflow in .github/workflows/ci.yml
 
 .PHONY: integration_tests
 integration_tests: test-e2e # integration_tests is invoked by the re-usable go-test workflow in .github/workflows/ci.yml
+
+.PHONY: coverage_report
+coverage_report: # coverage_report is invoked by the re-usable go-test workflow in .github/workflows/ci.yml
+	go tool covdata merge -i coverage/unit,coverage/integration/,coverage/version -o coverage/merged/
+	go tool covdata textfmt -i coverage/merged/ -o coverage/report/textfmt.txt
+	go tool covdata percent -i coverage/merged/ | awk '{ print $$1, substr($$3, 1, length($$3)-1); }' > coverage/report/percent.txt
+	go tool cover -html coverage/report/textfmt.txt -o coverage/report/coverage.html
+	go tool cover -func=coverage/report/textfmt.txt | tail -n 1 > coverage/report/overall-coverage.txt
+	./coverage/generate-markdown-summary.sh
+	@printf "\n\nOverall Coverage: "
+	@awk '{ print $$3; }' coverage/report/overall-coverage.txt
+	@echo
+	@go tool covdata percent -i coverage/merged | column -t
 
 # TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
 # The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
@@ -93,7 +113,7 @@ setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
 
 .PHONY: test-e2e
 test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
+	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -race -ginkgo.v
 	$(MAKE) cleanup-test-e2e
 
 .PHONY: cleanup-test-e2e
