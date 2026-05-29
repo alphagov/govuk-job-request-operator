@@ -24,7 +24,8 @@ type JobRequestPodSpecFrom struct {
 	// +kubebuilder:validation:Enum=apps/v1;
 	Group string `json:"group"`
 	// +kubebuilder:validation:Enum=Deployment;
-	Kind          string               `json:"kind"`
+	Kind string `json:"kind"`
+	// Selector for the resource which contains the pod spec to use for the job.
 	LabelSelector metav1.LabelSelector `json:"labelSelector"`
 }
 
@@ -46,6 +47,7 @@ type JobRequestSpec struct {
 }
 
 // JobRequestStatus defines the observed state of JobRequest.
+
 type JobRequestStatus struct {
 	// Name of the Kubernetes Job created for this job request.
 	JobName string `json:"jobName,omitempty"`
@@ -60,9 +62,14 @@ type JobRequestStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=jr
+// +kubebuilder:printcolumn:name="Command",type=string,JSONPath=`.spec.command`
+// +kubebuilder:printcolumn:name="Arguments",type=string,JSONPath=`.spec.args`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
+// +kubebuilder:printcolumn:name="Job Name",type=string,JSONPath=`.status.jobName`
+// +kubebuilder:printcolumn:name="Requested By",type=string,JSONPath=`.status.requestedBy`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// JobRequest is the Schema for the jobrequests API
+// JobRequest represents a request to run a command in the cluster.
 type JobRequest struct {
 	metav1.TypeMeta `json:",inline"`
 
