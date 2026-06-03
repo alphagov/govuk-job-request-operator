@@ -1,6 +1,6 @@
 module github.com/alphagov/govuk-job-request-operator
 
-go 1.26.0
+go 1.26.4
 
 require (
 	github.com/onsi/ginkgo/v2 v2.28.3
