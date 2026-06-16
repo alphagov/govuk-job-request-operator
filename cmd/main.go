@@ -179,16 +179,21 @@ func main() {
 	}
 
 	if err := (&controller.JobRequestReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+		CacheClient:     mgr.GetClient(),
+		ApiServerClient: mgr.GetAPIReader(),
+		Scheme:          mgr.GetScheme(),
+		Log:             mgr.GetLogger(),
+	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
 	}
+
 	if err := (&controller.JobRequestReviewReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+		CacheClient:     mgr.GetClient(),
+		ApiServerClient: mgr.GetAPIReader(),
+		Scheme:          mgr.GetScheme(),
+		Log:             mgr.GetLogger(),
+	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequestreview")
 		os.Exit(1)
 	}

@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: govuk-replatform-test-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: govuk-replatform-test-app
+  template:
+    metadata:
+      labels:
+        app: govuk-replatform-test-app
+    spec:
+      containers:
+      - image: ghcr.io/alphagov/govuk/govuk-replatform-test-app:v47
+        imagePullPolicy: IfNotPresent
+        name: app
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          runAsNonRoot: true
+          runAsUser: 1000
+          runAsGroup: 1000
+          seccompProfile:
+            type: RuntimeDefault
