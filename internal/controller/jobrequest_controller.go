@@ -19,12 +19,14 @@ package controller
 import (
 	"context"
 
+	appsv1 "k8s.io/api/apps/v1"
+
+	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 )
 
 // JobRequestReconciler reconciles a JobRequest object
@@ -47,9 +49,37 @@ type JobRequestReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.3/pkg/reconcile
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	// Fetch the JobRequest instance
+	jobRequest := &platformv1.JobRequest{}
+	err := r.Get(ctx, req.NamespacedName, jobRequest)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// If the custom resource is not found then it usually means that it was deleted or not created
+			// In this way, we will stop the reconciliation
+			log.Info("JobRequest resource not found. Ignoring since object must be deleted")
+			return ctrl.Result{}, nil
+		}
+		// Error reading the object - requeue the request.
+		log.Error(err, "Failed to get JobRequest")
+		return ctrl.Result{}, err
+	}
+
+	// Retrieve the app label from the jobRequest
+	appName := jobRequest.Spec.ContainerFrom.PodSpecFrom.Name
+
+	/*
+		Create a Job off from the jobrequest:
+		Retrieving the deployment
+		Create a Job from the deployment
+		Run it
+	*/
+
+	deployment := &appsv1.DeploymentList{}
+	if err := r.List(ctx, deployment, client.InNamespace(req.Namespace), client.MatchingFields{"appName": appName}); err != nil {
+		log.Error(err, "unable to list deployments")
+	}
 
 	return ctrl.Result{}, nil
 }

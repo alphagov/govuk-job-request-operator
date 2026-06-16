@@ -185,6 +185,7 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
 	}
+
 	if err := (&controller.JobRequestReviewReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
