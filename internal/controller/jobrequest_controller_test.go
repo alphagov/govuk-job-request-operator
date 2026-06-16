@@ -21,7 +21,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -32,54 +31,41 @@ import (
 
 var _ = Describe("JobRequest Controller", func() {
 	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
+		resourceName := "test-resource"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
-		jobrequest := &platformv1.JobRequest{}
 
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind JobRequest")
-			err := k8sClient.Get(ctx, typeNamespacedName, jobrequest)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &platformv1.JobRequest{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					Spec: platformv1.JobRequestSpec{
-						ContainerFrom: platformv1.JobRequestContainerFrom{
-							PodSpecFrom: platformv1.JobRequestPodSpecFrom{
-								Group: "apps/v1",
-								Kind:  "Deployment",
-								Name:  "whitehall-admin",
-							},
-							ContainerName: "example-container",
-						},
-						Command: "echo",
-						Args:    []string{"Hello, World!"},
-					},
-					// TODO(user): Specify other spec details if needed.
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &platformv1.JobRequest{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance JobRequest")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
+
+			resourceName = "test-resource"
+
+			resource := &platformv1.JobRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: platformv1.JobRequestSpec{
+					ContainerFrom: platformv1.JobRequestContainerFrom{
+						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
+							Group: "apps/v1",
+							Kind:  "Deployment",
+							Name:  "example-app",
+						},
+						ContainerName: "example-container",
+					},
+					Command: "echo",
+					Args:    []string{"Hello, World!"},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
 			controllerReconciler := &JobRequestReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
@@ -89,8 +75,29 @@ var _ = Describe("JobRequest Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			By("Cleanup the specific resource instance JobRequest")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
+
+		It("should successfully reconcile if resource doesn't exist", func() {
+			controllerReconciler := &JobRequestReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		/*
+			Create a JobRequest struct
+			Call the reconcile method which creates the job
+			Expect that not to error
+			Use the client to retrieve the Job (verify that it is created)
+			Clean up
+		*/
 	})
 })
