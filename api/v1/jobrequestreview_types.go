@@ -45,7 +45,7 @@ type JobRequestReviewStatus struct {
 // +kubebuilder:printcolumn:name="Reviewed By",type=string,JSONPath=`.status.reviewedBy`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
-// JobRequestReview represents a users approval to run a job in the cluster
+// JobRequestReview represents a decision to run a requested job in the cluster
 type JobRequestReview struct {
 	metav1.TypeMeta `json:",inline"`
 
