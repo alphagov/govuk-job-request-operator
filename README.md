@@ -28,9 +28,7 @@ spec:
     podSpecFrom:
       group: apps/v1
       kind: Deployment
-      labelSelector:
-        matchLabels:
-          app: whitehall-admin
+      name: whitehall-admin
     containerName: app
   command: rake
   args: [ "some:task", "some-arg" ]

@@ -32,7 +32,8 @@ spec:
     name: v1
     schema:
       openAPIV3Schema:
-        description: JobRequestReview represents a users approval to run a job in the cluster
+        description: JobRequestReview represents a users approval to run a job in
+          the cluster
         properties:
           apiVersion:
             description: |-
