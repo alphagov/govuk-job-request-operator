@@ -25,8 +25,8 @@ type JobRequestPodSpecFrom struct {
 	Group string `json:"group"`
 	// +kubebuilder:validation:Enum=Deployment;
 	Kind string `json:"kind"`
-	// Selector for the resource which contains the pod spec to use for the job.
-	LabelSelector metav1.LabelSelector `json:"labelSelector"`
+	// Resource name which contains the pod spec to use for the job.
+	Name string `json:"name"`
 }
 
 type JobRequestContainerFrom struct {

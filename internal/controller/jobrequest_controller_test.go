@@ -56,9 +56,7 @@ var _ = Describe("JobRequest Controller", func() {
 							PodSpecFrom: platformv1.JobRequestPodSpecFrom{
 								Group: "apps/v1",
 								Kind:  "Deployment",
-								LabelSelector: metav1.LabelSelector{
-									MatchLabels: map[string]string{"app": "example"},
-								},
+								Name:  "whitehall-admin",
 							},
 							ContainerName: "example-container",
 						},
