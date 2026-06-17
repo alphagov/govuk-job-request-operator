@@ -41,7 +41,8 @@ var _ = Describe("JobRequest Controller", func() {
 		}
 
 		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
+			// TODO: this test is unfinished we need to create the job and test it got created correctly.
+			By("Reconciling the created primary resource")
 
 			resourceName = "test-resource"
 
@@ -67,8 +68,65 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 
 			controllerReconciler := &JobRequestReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// TODO: Verify the job has been created correctly
+
+			By("Cleanup the specific resource instance JobRequest")
+			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+		})
+
+		It("should successfully reconcile if resource doesn't exist", func() {
+			controllerReconciler := &JobRequestReconciler{
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should successfully reconcile if we cannot retrieve the required pod spec from target resource", func() {
+			By("Reconciling the created primary resource")
+
+			resourceName = "test-resource"
+
+			resource := &platformv1.JobRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: platformv1.JobRequestSpec{
+					ContainerFrom: platformv1.JobRequestContainerFrom{
+						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
+							Group: "apps/v1",
+							Kind:  "Deployment",
+							Name:  "example-app",
+						},
+						ContainerName: "example-container",
+					},
+					Command: "echo",
+					Args:    []string{"Hello, World!"},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+
+			controllerReconciler := &JobRequestReconciler{
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -78,18 +136,6 @@ var _ = Describe("JobRequest Controller", func() {
 
 			By("Cleanup the specific resource instance JobRequest")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-
-		It("should successfully reconcile if resource doesn't exist", func() {
-			controllerReconciler := &JobRequestReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
 		})
 
 		/*

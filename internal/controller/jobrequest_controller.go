@@ -31,8 +31,9 @@ import (
 
 // JobRequestReconciler reconciles a JobRequest object
 type JobRequestReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
+	CacheClient     client.Client
+	ApiServerClient client.Reader
+	Scheme          *runtime.Scheme
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
@@ -53,7 +54,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	// Fetch the JobRequest instance
 	jobRequest := &platformv1.JobRequest{}
-	err := r.Get(ctx, req.NamespacedName, jobRequest)
+	err := r.CacheClient.Get(ctx, req.NamespacedName, jobRequest)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// If the custom resource is not found then it usually means that it was deleted or not created
@@ -66,8 +67,8 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, err
 	}
 
-	// Retrieve the app label from the jobRequest
-	appName := jobRequest.Spec.ContainerFrom.PodSpecFrom.Name
+	// Retrieve the resource  from the jobRequest
+	// appName := jobRequest.Spec.ContainerFrom.PodSpecFrom.Name
 
 	/*
 		Create a Job off from the jobrequest:
@@ -76,9 +77,14 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		Run it
 	*/
 
-	deployment := &appsv1.DeploymentList{}
-	if err := r.List(ctx, deployment, client.InNamespace(req.Namespace), client.MatchingFields{"appName": appName}); err != nil {
-		log.Error(err, "unable to list deployments")
+	deploymentList := &appsv1.DeploymentList{} // TODO: this could be another resource like another Job
+	opts := []client.ListOption{
+		client.MatchingFields{"metadata.name": "whitehall-admin"},
+	}
+
+	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil {
+		log.Error(err, "Failed to list Resources") // TODO: this validation should be done in the cli / gatekeeper
+		return ctrl.Result{}, nil
 	}
 
 	return ctrl.Result{}, nil

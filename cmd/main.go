@@ -179,8 +179,9 @@ func main() {
 	}
 
 	if err := (&controller.JobRequestReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		CacheClient:     mgr.GetClient(),
+		ApiServerClient: mgr.GetAPIReader(),
+		Scheme:          mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
