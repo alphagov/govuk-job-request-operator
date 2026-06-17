@@ -41,11 +41,12 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	ctx       context.Context
-	cancel    context.CancelFunc
-	testEnv   *envtest.Environment
-	cfg       *rest.Config
-	k8sClient client.Client
+	ctx          context.Context
+	cancel       context.CancelFunc
+	testEnv      *envtest.Environment
+	cfg          *rest.Config
+	k8sClient    client.Client
+	k8sApiReader client.Reader
 )
 
 func TestControllers(t *testing.T) {
@@ -84,6 +85,10 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	k8sApiReader, err = client.New(cfg, client.Options{Scheme: scheme.Scheme, Cache: nil})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(k8sApiReader).NotTo(BeNil())
 })
 
 var _ = AfterSuite(func() {
