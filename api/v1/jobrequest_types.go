@@ -25,7 +25,7 @@ type JobRequestPodSpecFrom struct {
 	Group string `json:"group"`
 	// +kubebuilder:validation:Enum=Deployment;
 	Kind string `json:"kind"`
-	// Resouce name which contains the pod spec to use for the job.
+	// Resource name which contains the pod spec to use for the job.
 	Name string `json:"name"`
 }
 
