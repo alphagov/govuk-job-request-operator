@@ -87,8 +87,8 @@ spec:
                         - Deployment
                         type: string
                       name:
-                        description: Resouce name which contains the pod spec to use
-                          for the job.
+                        description: Resource name which contains the pod spec to
+                          use for the job.
                         type: string
                     required:
                     - group
