@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
@@ -39,8 +40,20 @@ type JobRequestReconciler struct {
 	Scheme          *runtime.Scheme
 }
 
-func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*batch.Job, error) {
+func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
+	targetContainer := make([]v1.Container, 0)
+
+	for _, c := range resource.Spec.Template.Spec.Containers {
+		if c.Name == jobRequest.Spec.ContainerFrom.ContainerName {
+			c.Command = []string{jobRequest.Spec.Command}
+			c.Args = jobRequest.Spec.Args
+			targetContainer = append(targetContainer, c)
+		}
+	}
+
 	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
+
+	jobTemplatePodSpec.Spec.Containers = targetContainer
 	jobTemplatePodSpec.Spec.RestartPolicy = "Never"
 
 	job := &batch.Job{
@@ -58,6 +71,7 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*
 	maps.Copy(job.ObjectMeta.Annotations, resource.ObjectMeta.Annotations)
 	maps.Copy(job.ObjectMeta.Labels, resource.ObjectMeta.Labels)
 
+	// TODO: add sensible security config
 	if err := ctrl.SetControllerReference(resource, job, r.Scheme); err != nil {
 		return nil, err
 	}
@@ -105,7 +119,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	jobTemplate, err := r.CreateJobTemplate(&deploymentList.Items[0])
+	jobTemplate, err := r.CreateJobTemplate(&deploymentList.Items[0], *jobRequest)
 	if err != nil {
 		log.Error(err, "Failed to create Job Template")
 		return ctrl.Result{}, nil
