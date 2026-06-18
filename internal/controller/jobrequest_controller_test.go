@@ -19,6 +19,8 @@ package controller
 import (
 	"context"
 
+	"k8s.io/utils/ptr"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/types"
@@ -35,23 +37,22 @@ import (
 
 var _ = Describe("JobRequest Controller", func() {
 	Context("When reconciling a resource", func() {
-		resourceName := "test-resource"
+		resourceName := "sample"
+		resourceNamespace := "default"
 
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default",
+			Namespace: resourceNamespace,
 		}
 
-		It("should successfully reconcile the resource", func() {
+		FIt("should successfully reconcile the resource", func() {
 			By("Reconciling the created primary resource")
 
 			var replicasNum int32 = 1
-			resourceName := "test-resource"
-			resourceNamespace := "default"
 
-			resourceJobRequest := &platformv1.JobRequest{
+			jobRequest := &platformv1.JobRequest{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: resourceNamespace,
@@ -96,6 +97,15 @@ var _ = Describe("JobRequest Controller", func() {
 						},
 						Spec: v1.PodSpec{
 							RestartPolicy: "Always",
+							SecurityContext: &v1.PodSecurityContext{
+								RunAsUser:    ptr.To(int64(1001)),
+								RunAsGroup:   ptr.To(int64(1001)),
+								FSGroup:      ptr.To(int64(1001)),
+								RunAsNonRoot: ptr.To(true),
+								SeccompProfile: &v1.SeccompProfile{
+									Type: "RuntimeDefault",
+								},
+							},
 							Containers: []v1.Container{
 								{
 									Name:  "foo-container",
@@ -106,6 +116,15 @@ var _ = Describe("JobRequest Controller", func() {
 											Value: "bar",
 										},
 									},
+									SecurityContext: &v1.SecurityContext{
+										AllowPrivilegeEscalation: ptr.To(false),
+										Capabilities: &v1.Capabilities{
+											Drop: []v1.Capability{
+												"all",
+											},
+										},
+										ReadOnlyRootFilesystem: ptr.To(true),
+									},
 								},
 							},
 						},
@@ -115,7 +134,7 @@ var _ = Describe("JobRequest Controller", func() {
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 
-			Expect(k8sClient.Create(ctx, resourceJobRequest)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
 			controllerReconciler := &JobRequestReconciler{
 				CacheClient:     k8sClient,
@@ -142,17 +161,29 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Image).To(Equal("foo/bar"))
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("foo"))
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("bar"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(ptr.To(false)))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop[0]).To(BeEquivalentTo("all"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem).To(Equal(ptr.To(true)))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(Equal(ptr.To(true)))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(Equal(ptr.To(int64(1001))))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsGroup).To(Equal(ptr.To(int64(1001))))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(ptr.To(int64(1001))))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(BeEquivalentTo("RuntimeDefault"))
 			Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
 			Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
 			Expect(jobList.Items[0].Labels["fizz"]).To(Equal("buzz"))
 
-			By("Cleanup the specific resource instance JobRequest")
+			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()).NotTo(BeNil())
+			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(resourceName))
+			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Kind).To(Equal("JobRequest"))
+
+			By("Cleanup the JobRequest, Deployment and Job")
 			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
-			Expect(k8sClient.Delete(ctx, resourceJobRequest)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, &jobList.Items[0])).To(Succeed())
 		})
 
-		It("should successfully reconcile if resource doesn't exist", func() {
+		It("should successfully reconcile if jobRequest doesn't exist", func() {
 			controllerReconciler := &JobRequestReconciler{
 				CacheClient:     k8sClient,
 				ApiServerClient: k8sApiReader,
@@ -166,16 +197,11 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should successfully reconcile if we cannot retrieve the required pod spec from target resource", func() {
-			By("Reconciling the created primary resource")
-			Skip("temporarily")
-
-			resourceName = "test-resource"
-
-			resource := &platformv1.JobRequest{
+		It("should successfully reconcile if we cannot retrieve the target resource in the jobRequest from the cluster", func() {
+			jobRequest := &platformv1.JobRequest{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
-					Namespace: "default",
+					Namespace: resourceNamespace,
 				},
 				Spec: platformv1.JobRequestSpec{
 					ContainerFrom: platformv1.JobRequestContainerFrom{
@@ -191,7 +217,7 @@ var _ = Describe("JobRequest Controller", func() {
 				},
 			}
 
-			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
 			controllerReconciler := &JobRequestReconciler{
 				CacheClient:     k8sClient,
@@ -204,24 +230,103 @@ var _ = Describe("JobRequest Controller", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance JobRequest")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+			By("Cleanup the JobRequest")
+			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
 		})
 
-		It("should successfully reconcile even if the resource reference from which to create the job does not exist", func() {
+		// TODO: Rewrite test name
+		It("should successfully reconcile even if the container in the resource reference from the jobRequest doesn't exist", func() {
+			var replicasNum int32 = 1
+			containerName := "example-container"
+			targetContainerName := "foo-container"
+			resourceName := "test-resource"
+			resourceNamespace := "default"
+
+			jobRequest := &platformv1.JobRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: resourceNamespace,
+				},
+				Spec: platformv1.JobRequestSpec{
+					ContainerFrom: platformv1.JobRequestContainerFrom{
+						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
+							Group: "apps/v1",
+							Kind:  "Deployment",
+							Name:  "example-app",
+						},
+						ContainerName: containerName,
+					},
+					Command: "echo",
+					Args:    []string{"Hello, World!"},
+				},
+			}
+
+			targetResource := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: resourceNamespace,
+					Annotations: map[string]string{
+						"foo": "bar",
+					},
+					Labels: map[string]string{
+						"fizz": "buzz",
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: &replicasNum,
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app": "foo",
+						},
+					},
+					Template: v1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"app": "foo",
+							},
+						},
+						Spec: v1.PodSpec{
+							RestartPolicy: "Always",
+							Containers: []v1.Container{
+								{
+									Name:  targetContainerName,
+									Image: "foo/bar",
+									Env: []v1.EnvVar{
+										{
+											Name:  "foo",
+											Value: "bar",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+			controllerReconciler := &JobRequestReconciler{
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Cleanup the JobRequest and Deployment")
+			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
+		})
+
+		It("should return an error when the cacheClient cannot create the job", func() {
 			Skip("todo")
+			// Try see if creating it into a namespace that doesn't exist
 		})
-
-		It("should return an error when the reconcile function cannot create the job", func() {
-			Skip("todo")
-		})
-
-		/*
-			Create a JobRequest struct
-			Call the reconcile method which creates the job
-			Expect that not to error
-			Use the client to retrieve the Job (verify that it is created)
-			Clean up
-		*/
 	})
 })

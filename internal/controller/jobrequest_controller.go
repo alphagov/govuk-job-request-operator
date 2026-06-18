@@ -18,12 +18,12 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,45 +38,6 @@ type JobRequestReconciler struct {
 	CacheClient     client.Client
 	ApiServerClient client.Reader
 	Scheme          *runtime.Scheme
-}
-
-func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
-	targetContainer := make([]v1.Container, 0)
-
-	for _, c := range resource.Spec.Template.Spec.Containers {
-		if c.Name == jobRequest.Spec.ContainerFrom.ContainerName {
-			c.Command = []string{jobRequest.Spec.Command}
-			c.Args = jobRequest.Spec.Args
-			targetContainer = append(targetContainer, c)
-		}
-	}
-
-	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
-
-	jobTemplatePodSpec.Spec.Containers = targetContainer
-	jobTemplatePodSpec.Spec.RestartPolicy = "Never"
-
-	job := &batch.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			Labels:      make(map[string]string),
-			Annotations: make(map[string]string),
-			Name:        resource.Name,
-			Namespace:   resource.Namespace,
-		},
-		Spec: batch.JobSpec{
-			Template: jobTemplatePodSpec,
-		},
-	}
-
-	maps.Copy(job.ObjectMeta.Annotations, resource.ObjectMeta.Annotations)
-	maps.Copy(job.ObjectMeta.Labels, resource.ObjectMeta.Labels)
-
-	// TODO: add sensible security config
-	if err := ctrl.SetControllerReference(resource, job, r.Scheme); err != nil {
-		return nil, err
-	}
-
-	return job, nil
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
@@ -109,29 +70,87 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	deploymentList := &appsv1.DeploymentList{} // TODO: this could be another resource like another Job
+	/*
+		If status is nil then:
+		Set state as pending
+		Set jobName as nil
+		Set requestedBy to "standard user"
+
+		If pending then requeue again (consider rewording the job requests states in the CRD)
+	*/
+
+	/*
+		If state is APPROVED then continue
+		If state is DISAPPROVED then stop(?)
+	*/
+
+	// TODO: this could be another resource like another Job
+	deploymentList := &appsv1.DeploymentList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"metadata.name": req.Name},
 	}
 
-	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil {
-		log.Error(err, "Failed to list Resources") // TODO: this validation should be done in the cli / gatekeeper because a deployment that doesn't exist can't be used to create a job
+	// TODO: this validation should be done in the cli / gatekeeper because a deployment with valid values (e.g. container name and metadata.name) that doesn't exist can't be used to create a job
+	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
+		log.Error(err, "Failed to list Resources")
 		return ctrl.Result{}, nil
 	}
 
-	jobTemplate, err := r.CreateJobTemplate(&deploymentList.Items[0], *jobRequest)
+	job, err := r.CreateJobTemplate(&deploymentList.Items[0], *jobRequest)
 	if err != nil {
 		log.Error(err, "Failed to create Job Template")
 		return ctrl.Result{}, nil
 	}
 
-	createJobErr := r.CacheClient.Create(ctx, jobTemplate)
+	createJobErr := r.CacheClient.Create(ctx, job)
 	if createJobErr != nil {
 		log.Error(createJobErr, "Failed to create Job resource")
 		return ctrl.Result{}, createJobErr
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
+	targetContainer := retrieveContainerFromResource(resource, jobRequest)
+
+	if len(targetContainer) == 0 {
+		return nil, errors.New("container not found in resource")
+	}
+
+	job := batch.Job{}
+	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
+	jobTemplatePodSpec.Spec.Containers = targetContainer
+	jobTemplatePodSpec.Spec.RestartPolicy = "Never"
+	job.ObjectMeta.Labels = make(map[string]string)
+	job.ObjectMeta.Annotations = make(map[string]string)
+	job.ObjectMeta.Name = resource.Name
+	job.ObjectMeta.Namespace = resource.Namespace
+	job.Spec.Template = jobTemplatePodSpec
+
+	maps.Copy(job.ObjectMeta.Annotations, resource.ObjectMeta.Annotations)
+	maps.Copy(job.ObjectMeta.Labels, resource.ObjectMeta.Labels)
+
+	if err := ctrl.SetControllerReference(&jobRequest, &job, r.Scheme); err != nil {
+		return &job, err
+	}
+
+	return &job, nil
+}
+
+func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) []v1.Container {
+
+	targetContainer := make([]v1.Container, 0)
+
+	for _, c := range resource.Spec.Template.Spec.Containers {
+		if c.Name == jobRequest.Spec.ContainerFrom.ContainerName {
+			c.Command = []string{jobRequest.Spec.Command}
+			c.Args = jobRequest.Spec.Args
+			targetContainer = append(targetContainer, c)
+		}
+	}
+
+	return targetContainer
 }
 
 // SetupWithManager sets up the controller with the Manager.
