@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+
 	// "maps"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -47,6 +49,11 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*
 	jobTemplatePodSpec.Spec.RestartPolicy = "Never"
 
 	job := &batch.Job{
+		// TypeMeta: metav1.TypeMeta{
+		// 	Kind:       "Job",
+		// 	APIVersion: "batch/v1",
+		// },
+
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      make(map[string]string),
 			Annotations: make(map[string]string),
@@ -56,7 +63,12 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*
 		Spec: batch.JobSpec{
 			Template: jobTemplatePodSpec,
 		},
+		// Status: batch.JobStatus{},
 	}
+
+	// job.SetGroupVersionKind(schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "Job"})
+
+	fmt.Printf("%v", job)
 
 	// maps.Copy(job.Annotations, resource.Spec)
 	// job.Annotations[scheduledTimeAnnotation] = scheduledTime.Format(time.RFC3339)

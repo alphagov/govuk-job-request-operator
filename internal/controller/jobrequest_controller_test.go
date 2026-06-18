@@ -49,12 +49,13 @@ var _ = Describe("JobRequest Controller", func() {
 			By("Reconciling the created primary resource")
 
 			var replicasNum int32 = 1
-			resourceName = "test-resource"
+			resourceName := "test-resource"
+			resourceNamespace := "default"
 
 			resourceJobRequest := &platformv1.JobRequest{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
-					Namespace: "default",
+					Namespace: resourceNamespace,
 				},
 				Spec: platformv1.JobRequestSpec{
 					ContainerFrom: platformv1.JobRequestContainerFrom{
@@ -73,7 +74,7 @@ var _ = Describe("JobRequest Controller", func() {
 			targetResource := &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
-					Namespace: "default",
+					Namespace: resourceNamespace,
 				},
 				Spec: appsv1.DeploymentSpec{
 					Replicas: &replicasNum,
@@ -107,31 +108,6 @@ var _ = Describe("JobRequest Controller", func() {
 				},
 			}
 
-			// expectedJob := &batch.Job{
-			// 	TypeMeta: metav1.TypeMeta{Kind: "Job"},
-			// 	ObjectMeta: metav1.ObjectMeta{
-			// 		Name:      resourceName,
-			// 		Namespace: "default",
-			// 	},
-			// 	Spec: batch.JobSpec{
-			// 		Selector: &metav1.LabelSelector{
-			// 			MatchLabels: map[string]string{"app": "foo"},
-			// 		},
-			// 		Template: v1.PodTemplateSpec{
-			// 			ObjectMeta: metav1.ObjectMeta{
-			// 				Labels: map[string]string{
-			// 					"app": "foo",
-			// 				},
-			// 			},
-			// 			Spec: v1.PodSpec{
-			// 				Containers: []v1.Container{
-			// 					{Image: "foo/bar"},
-			// 				},
-			// 			},
-			// 		},
-			// 	},
-			// }
-
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 
 			Expect(k8sClient.Create(ctx, resourceJobRequest)).To(Succeed())
@@ -153,7 +129,14 @@ var _ = Describe("JobRequest Controller", func() {
 			}
 			k8sApiReader.List(ctx, jobList, opts...)
 
-			Expect(len(jobList.Items)).To(BeNumerically(">", 0))
+			Expect(len(jobList.Items)).To(BeNumerically("==", 1))
+			Expect(jobList.Items[0].GetName()).To(Equal(resourceName))
+			Expect(jobList.Items[0].GetNamespace()).To(Equal(resourceNamespace))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Name).To(Equal("foo-container"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Image).To(Equal("foo/bar"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("foo"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("bar"))
+			Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
 
 			By("Cleanup the specific resource instance JobRequest")
 			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
