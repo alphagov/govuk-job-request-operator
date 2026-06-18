@@ -211,6 +211,10 @@ var _ = Describe("JobRequest Controller", func() {
 			Skip("todo")
 		})
 
+		It("should return an error when the reconcile function cannot create the job", func() {
+			Skip("todo")
+		})
+
 		/*
 			Create a JobRequest struct
 			Call the reconcile method which creates the job
