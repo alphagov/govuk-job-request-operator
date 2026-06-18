@@ -138,6 +138,7 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(jobList.Items[0].GetName()).To(Equal(resourceName))
 			Expect(jobList.Items[0].GetNamespace()).To(Equal(resourceNamespace))
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Name).To(Equal("foo-container"))
+			Expect(len(jobList.Items[0].Spec.Template.Spec.Containers)).To(BeNumerically("==", 1))
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Image).To(Equal("foo/bar"))
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("foo"))
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("bar"))
