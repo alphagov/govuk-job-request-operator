@@ -62,7 +62,7 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*
 		Spec: batch.JobSpec{
 			Template: jobTemplatePodSpec,
 		},
-		// Status: batch.JobStatus{},
+		// Status: batch.JobStatus{}, // TODO: think about how we will set and handle the status here?
 	}
 
 	// job.SetGroupVersionKind(schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "Job"})
