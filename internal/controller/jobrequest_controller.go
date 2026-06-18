@@ -19,8 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
-
-	// "maps"
+	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
@@ -68,15 +67,14 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*
 
 	// job.SetGroupVersionKind(schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "Job"})
 
-	fmt.Printf("%v", job)
+	maps.Copy(resource.Annotations, job.Annotations)
+	maps.Copy(resource.Spec.Template.ObjectMeta.Labels, job.Spec.Template.ObjectMeta.Labels)
 
-	// maps.Copy(job.Annotations, resource.Spec)
-	// job.Annotations[scheduledTimeAnnotation] = scheduledTime.Format(time.RFC3339)
-	// maps.Copy(job.Labels, resource.Spec.JobTemplate.Labels)
 	if err := ctrl.SetControllerReference(resource, job, r.Scheme); err != nil {
 		return nil, err
 	}
 
+	fmt.Printf("%v", job)
 	return job, nil
 }
 
