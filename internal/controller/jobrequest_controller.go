@@ -41,18 +41,10 @@ type JobRequestReconciler struct {
 }
 
 func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*batch.Job, error) {
-	// We want job names for a given nominal start time to have a deterministic name to avoid the same job being created twice
-	// name := fmt.Sprintf("%s-%d", cronJob.Name, scheduledTime.Unix())
-
 	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
 	jobTemplatePodSpec.Spec.RestartPolicy = "Never"
 
 	job := &batch.Job{
-		// TypeMeta: metav1.TypeMeta{
-		// 	Kind:       "Job",
-		// 	APIVersion: "batch/v1",
-		// },
-
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      make(map[string]string),
 			Annotations: make(map[string]string),
@@ -62,19 +54,15 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*
 		Spec: batch.JobSpec{
 			Template: jobTemplatePodSpec,
 		},
-		// Status: batch.JobStatus{}, // TODO: think about how we will set and handle the status here?
 	}
 
-	// job.SetGroupVersionKind(schema.GroupVersionKind{Group: "batch", Version: "v1", Kind: "Job"})
-
-	maps.Copy(resource.Annotations, job.Annotations)
-	maps.Copy(resource.Spec.Template.ObjectMeta.Labels, job.Spec.Template.ObjectMeta.Labels)
+	maps.Copy(job.ObjectMeta.Annotations, resource.ObjectMeta.Annotations)
+	maps.Copy(job.ObjectMeta.Labels, resource.ObjectMeta.Labels)
 
 	if err := ctrl.SetControllerReference(resource, job, r.Scheme); err != nil {
 		return nil, err
 	}
 
-	fmt.Printf("%v", job)
 	return job, nil
 }
 
@@ -94,7 +82,6 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment) (*
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
-	// Fetch the JobRequest instance
 	jobRequest := &platformv1.JobRequest{}
 	err := r.CacheClient.Get(ctx, req.NamespacedName, jobRequest)
 	if err != nil {
@@ -108,13 +95,6 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		log.Error(err, "Failed to get JobRequest")
 		return ctrl.Result{}, err
 	}
-
-	/*
-		Create a Job off from the jobrequest:
-		Retrieving the deployment
-		Create a Job from the deployment
-		Run it
-	*/
 
 	deploymentList := &appsv1.DeploymentList{} // TODO: this could be another resource like another Job
 	opts := []client.ListOption{
