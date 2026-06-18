@@ -45,7 +45,6 @@ var _ = Describe("JobRequest Controller", func() {
 		}
 
 		It("should successfully reconcile the resource", func() {
-			// TODO: this test is unfinished we need to create the job and test it got created correctly.
 			By("Reconciling the created primary resource")
 
 			var replicasNum int32 = 1
@@ -75,6 +74,12 @@ var _ = Describe("JobRequest Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      resourceName,
 					Namespace: resourceNamespace,
+					Annotations: map[string]string{
+						"foo": "bar",
+					},
+					Labels: map[string]string{
+						"fizz": "buzz",
+					},
 				},
 				Spec: appsv1.DeploymentSpec{
 					Replicas: &replicasNum,
@@ -137,10 +142,13 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("foo"))
 			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("bar"))
 			Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
+			Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
+			Expect(jobList.Items[0].Labels["fizz"]).To(Equal("buzz"))
 
 			By("Cleanup the specific resource instance JobRequest")
 			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, resourceJobRequest)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &jobList.Items[0])).To(Succeed())
 		})
 
 		It("should successfully reconcile if resource doesn't exist", func() {
