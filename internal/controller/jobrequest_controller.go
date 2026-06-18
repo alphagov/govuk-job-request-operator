@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"maps"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -93,7 +92,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		}
 		// Error reading the object - requeue the request.
 		log.Error(err, "Failed to get JobRequest")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, nil
 	}
 
 	deploymentList := &appsv1.DeploymentList{} // TODO: this could be another resource like another Job
@@ -116,12 +115,6 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	if createJobErr != nil {
 		log.Error(createJobErr, "Failed to create Job resource")
 		return ctrl.Result{}, createJobErr
-	}
-
-	jobList := &batch.JobList{}
-	if err := r.ApiServerClient.List(ctx, jobList, opts...); err != nil {
-		log.Error(err, "Failed to list Resources")
-		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
