@@ -90,7 +90,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			log.Info("JobRequest resource not found. Ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
+		// Error reading the object
 		log.Error(err, "Failed to get JobRequest")
 		return ctrl.Result{}, nil
 	}
