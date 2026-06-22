@@ -323,10 +323,5 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
 		})
-
-		It("should return an error when the cacheClient cannot create the job", func() {
-			Skip("todo")
-			// Try see if creating it into a namespace that doesn't exist
-		})
 	})
 })

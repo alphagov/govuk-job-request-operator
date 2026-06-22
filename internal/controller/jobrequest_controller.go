@@ -33,7 +33,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-// JobRequestReconciler reconciles a JobRequest object
 type JobRequestReconciler struct {
 	CacheClient     client.Client
 	ApiServerClient client.Reader
@@ -44,15 +43,6 @@ type JobRequestReconciler struct {
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the JobRequest object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.23.3/pkg/reconcile
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
 
@@ -87,7 +77,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	// TODO: this could be another resource like another Job
 	deploymentList := &appsv1.DeploymentList{}
 	opts := []client.ListOption{
-		client.MatchingFields{"metadata.name": req.Name},
+		client.MatchingFields{"metadata.name": jobRequest.Spec.ContainerFrom.PodSpecFrom.Name},
 	}
 
 	// TODO: this validation should be done in the cli / gatekeeper because a deployment with valid values (e.g. container name and metadata.name) that doesn't exist can't be used to create a job
@@ -102,10 +92,10 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	createJobErr := r.CacheClient.Create(ctx, job)
-	if createJobErr != nil {
-		log.Error(createJobErr, "Failed to create Job resource")
-		return ctrl.Result{}, createJobErr
+	err = r.CacheClient.Create(ctx, job)
+	if err != nil {
+		log.Error(err, "Failed to create Job resource")
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
