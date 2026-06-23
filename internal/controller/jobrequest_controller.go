@@ -31,6 +31,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
+	"github.com/go-logr/logr"
 )
 
 type JobRequestReconciler struct {
@@ -69,36 +71,18 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
 		log.Error(err, "Failed to list Resources")
+		r.setState(ctx, jobRequest, "Failed")
 		return ctrl.Result{}, nil
-		// Set state to Failed on JobRequest
 	}
 
-	job, err := r.CreateJobTemplate(&deploymentList.Items[0], *jobRequest)
+	jobTemplate, err := r.CreateJobTemplate(&deploymentList.Items[0], *jobRequest)
 	if err != nil {
 		log.Error(err, "Failed to create Job Template")
-		return ctrl.Result{}, nil
-		// Set state to Failed on JobRequest
-	}
-
-	// If status.state is nil then set it to requested and end reconcile
-	if len(jobRequest.Status.State) == 0 {
-		jobRequest.Status.State = "Requested"
+		r.setState(ctx, jobRequest, "Failed")
 		return ctrl.Result{}, nil
 	}
 
-	// Check if job is approved
-	if jobRequest.Status.State == "Approved" {
-		err = r.CacheClient.Create(ctx, job)
-		if err != nil {
-			log.Error(err, "Failed to create Job resource")
-			return ctrl.Result{}, err
-			// Set state to failed
-		}
-		// Set then set status.state = started
-		jobRequest.Status.State = "Started"
-	}
-
-	return ctrl.Result{}, nil
+	return r.handleState(ctx, log, jobRequest, jobTemplate)
 }
 
 func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
@@ -129,7 +113,6 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment, jo
 }
 
 func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) []v1.Container {
-
 	targetContainer := make([]v1.Container, 0)
 
 	for _, c := range resource.Spec.Template.Spec.Containers {
@@ -141,6 +124,30 @@ func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platf
 	}
 
 	return targetContainer
+}
+
+func (r *JobRequestReconciler) handleState(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest, jobTemplate client.Object) (ctrl.Result, error) {
+	switch jobRequest.Status.State {
+	case "":
+		r.setState(ctx, jobRequest, "Requested")
+		return ctrl.Result{}, nil
+	case "Approved":
+		err := r.CacheClient.Create(ctx, jobTemplate)
+		if err != nil {
+			log.Error(err, "Failed to create Job resource")
+			r.setState(ctx, jobRequest, "Failed")
+			return ctrl.Result{}, err
+		}
+		r.setState(ctx, jobRequest, "Started")
+		return ctrl.Result{}, nil
+	default:
+		return ctrl.Result{}, nil
+	}
+}
+
+func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platformv1.JobRequest, state string) {
+	jobRequest.Status.State = state
+	r.CacheClient.Status().Update(ctx, jobRequest)
 }
 
 // SetupWithManager sets up the controller with the Manager.
