@@ -53,7 +53,6 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	err := r.getJobRequest(ctx, log, req.NamespacedName, jobRequest)
 	if err != nil {
-		log.Error(err, "Failed obj", "errored", jobRequest)
 		return ctrl.Result{}, nil
 	}
 
@@ -102,12 +101,12 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, log logr.L
 func (r *JobRequestReconciler) getJobRequest(ctx context.Context, log logr.Logger, namespaceName client.ObjectKey, jobRequest *platformv1.JobRequest) error {
 	err := r.CacheClient.Get(ctx, namespaceName, jobRequest)
 	if apierrors.IsNotFound(err) {
-		log.Info("JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
+		log.Error(err, "JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
 		return nil
 	}
 
 	if err != nil {
-		log.Error(err, "Failed to get JobRequest", "errored", jobRequest)
+		log.Error(err, "Failed to get JobRequest")
 		return err
 	}
 
