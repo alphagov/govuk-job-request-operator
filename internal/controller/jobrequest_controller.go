@@ -50,16 +50,10 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	log := logf.FromContext(ctx)
 
 	jobRequest := &platformv1.JobRequest{}
-	jobRequest.Status = platformv1.JobRequestStatus{
-		JobName:     "sample",
-		State:       "Approved",
-		ReviewName:  "foo",
-		RequestedBy: "arn://foobar",
-	}
-	r.CacheClient.Status().Update(ctx, jobRequest)
 
 	err := r.getJobRequest(ctx, log, req.NamespacedName, jobRequest)
 	if err != nil {
+		log.Error(err, "Failed obj", "errored", jobRequest)
 		return ctrl.Result{}, nil
 	}
 
@@ -98,7 +92,7 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, log logr.L
 
 	if err := ctrl.SetControllerReference(&jobRequest, &job, r.Scheme); err != nil {
 		log.Error(err, "Failed to create Job Template")
-		r.setState(ctx, &jobRequest, "Failed")
+		r.setState(ctx, log, &jobRequest, "Failed")
 		return &job, err
 	}
 
@@ -108,14 +102,16 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, log logr.L
 func (r *JobRequestReconciler) getJobRequest(ctx context.Context, log logr.Logger, namespaceName client.ObjectKey, jobRequest *platformv1.JobRequest) error {
 	err := r.CacheClient.Get(ctx, namespaceName, jobRequest)
 	if apierrors.IsNotFound(err) {
-		// If the custom resource is not found then it usually means that it was deleted or not created
-		// In this way, we will stop the reconciliation
-		log.Info("JobRequest resource not found. Ignoring since object must be deleted")
+		log.Info("JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
+		return nil
+	}
+
+	if err != nil {
+		log.Error(err, "Failed to get JobRequest", "errored", jobRequest)
 		return err
 	}
 
-	log.Error(err, "Failed to get JobRequest")
-	return err
+	return nil
 }
 
 func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) []v1.Container {
@@ -135,25 +131,28 @@ func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platf
 func (r *JobRequestReconciler) handleState(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest, jobTemplate client.Object) (ctrl.Result, error) {
 	switch jobRequest.Status.State {
 	case "":
-		r.setState(ctx, jobRequest, "Requested")
+		r.setState(ctx, log, jobRequest, "Requested")
 		return ctrl.Result{}, nil
 	case "Approved":
 		err := r.CacheClient.Create(ctx, jobTemplate)
 		if err != nil {
 			log.Error(err, "Failed to create Job resource")
-			r.setState(ctx, jobRequest, "Failed")
+			r.setState(ctx, log, jobRequest, "Failed")
 			return ctrl.Result{}, err
 		}
-		r.setState(ctx, jobRequest, "Started")
+		r.setState(ctx, log, jobRequest, "Started")
 		return ctrl.Result{}, nil
 	default:
 		return ctrl.Result{}, nil
 	}
 }
 
-func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platformv1.JobRequest, state string) {
+func (r *JobRequestReconciler) setState(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest, state string) {
 	jobRequest.Status.State = state
-	r.CacheClient.Status().Update(ctx, jobRequest)
+	err := r.CacheClient.Status().Update(ctx, jobRequest)
+	if err != nil {
+		log.Error(err, "Failed to UPDATE Job resource", "errored_obj", jobRequest)
+	}
 }
 
 func (r *JobRequestReconciler) getTargetResource(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest) (*ctrl.Result, *appsv1.DeploymentList) {
@@ -165,7 +164,7 @@ func (r *JobRequestReconciler) getTargetResource(ctx context.Context, log logr.L
 
 	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
 		log.Error(err, "Failed to list Resources")
-		r.setState(ctx, jobRequest, "Failed")
+		r.setState(ctx, log, jobRequest, "Failed")
 		return &ctrl.Result{}, nil
 	}
 
