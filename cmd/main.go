@@ -182,7 +182,7 @@ func main() {
 		CacheClient:     mgr.GetClient(),
 		ApiServerClient: mgr.GetAPIReader(),
 		Scheme:          mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
 	}

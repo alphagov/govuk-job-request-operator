@@ -47,10 +47,15 @@ var _ = Describe("JobRequest Controller", func() {
 			Namespace: resourceNamespace,
 		}
 
-		FIt("should successfully reconcile the resource", func() {
-			By("Reconciling the created primary resource")
-
+		FIt("should successfully reconcile. The primary resource should be approved and created", func() {
 			var replicasNum int32 = 1
+
+			jobRequestStatus := platformv1.JobRequestStatus{
+				JobName:     resourceName,
+				State:       "Approved",
+				ReviewName:  "foo",
+				RequestedBy: "arn://foobar",
+			}
 
 			jobRequest := &platformv1.JobRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -135,6 +140,9 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+			k8sClient.Get(ctx, typeNamespacedName, jobRequest)
+			jobRequest.Status = jobRequestStatus
+			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
 
 			controllerReconciler := &JobRequestReconciler{
 				CacheClient:     k8sClient,
