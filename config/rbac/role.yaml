@@ -5,6 +5,13 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - get
+  - list
+- apiGroups:
   - platform.publishing.service.gov.uk
   resources:
   - jobrequestreviews
@@ -33,10 +40,3 @@ rules:
   - get
   - patch
   - update
-- apiGroups:
-  - "apps"
-  resources:
-  - deployments
-  verbs:
-  - get
-  - list

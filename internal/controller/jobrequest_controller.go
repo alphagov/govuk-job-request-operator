@@ -42,6 +42,7 @@ type JobRequestReconciler struct {
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list
 
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -60,42 +61,41 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	/*
-		If status is nil then:
-		Set state as pending
-		Set jobName as nil
-		Set requestedBy to "standard user"
-
-		If pending then requeue again (consider rewording the job requests states in the CRD)
-	*/
-
-	/*
-		If state is APPROVED then continue
-		If state is DISAPPROVED then stop(?)
-	*/
-
 	// TODO: this could be another resource like another Job
 	deploymentList := &appsv1.DeploymentList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"metadata.name": jobRequest.Spec.ContainerFrom.PodSpecFrom.Name},
 	}
 
-	// TODO: this validation should be done in the cli / gatekeeper because a deployment with valid values (e.g. container name and metadata.name) that doesn't exist can't be used to create a job
 	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
 		log.Error(err, "Failed to list Resources")
 		return ctrl.Result{}, nil
+		// Set state to Failed on JobRequest
 	}
 
 	job, err := r.CreateJobTemplate(&deploymentList.Items[0], *jobRequest)
 	if err != nil {
 		log.Error(err, "Failed to create Job Template")
 		return ctrl.Result{}, nil
+		// Set state to Failed on JobRequest
 	}
 
-	err = r.CacheClient.Create(ctx, job)
-	if err != nil {
-		log.Error(err, "Failed to create Job resource")
-		return ctrl.Result{}, err
+	// If status.state is nil then set it to requested and end reconcile
+	if len(jobRequest.Status.State) == 0 {
+		jobRequest.Status.State = "Requested"
+		return ctrl.Result{}, nil
+	}
+
+	// Check if job is approved
+	if jobRequest.Status.State == "Approved" {
+		err = r.CacheClient.Create(ctx, job)
+		if err != nil {
+			log.Error(err, "Failed to create Job resource")
+			return ctrl.Result{}, err
+			// Set state to failed
+		}
+		// Set then set status.state = started
+		jobRequest.Status.State = "Started"
 	}
 
 	return ctrl.Result{}, nil
