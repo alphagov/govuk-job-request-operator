@@ -50,42 +50,33 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	log := logf.FromContext(ctx)
 
 	jobRequest := &platformv1.JobRequest{}
-	err := r.CacheClient.Get(ctx, req.NamespacedName, jobRequest)
+	jobRequest.Status = platformv1.JobRequestStatus{
+		JobName:     "sample",
+		State:       "Approved",
+		ReviewName:  "foo",
+		RequestedBy: "arn://foobar",
+	}
+	r.CacheClient.Status().Update(ctx, jobRequest)
+
+	err := r.getJobRequest(ctx, log, req.NamespacedName, jobRequest)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// If the custom resource is not found then it usually means that it was deleted or not created
-			// In this way, we will stop the reconciliation
-			log.Info("JobRequest resource not found. Ignoring since object must be deleted")
-			return ctrl.Result{}, nil
-		}
-		// Error reading the object
-		log.Error(err, "Failed to get JobRequest")
 		return ctrl.Result{}, nil
 	}
 
-	// TODO: this could be another resource like another Job
-	deploymentList := &appsv1.DeploymentList{}
-	opts := []client.ListOption{
-		client.MatchingFields{"metadata.name": jobRequest.Spec.ContainerFrom.PodSpecFrom.Name},
+	resourceResult, resourceList := r.getTargetResource(ctx, log, jobRequest)
+	if resourceResult != nil {
+		return *resourceResult, nil
 	}
 
-	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
-		log.Error(err, "Failed to list Resources")
-		r.setState(ctx, jobRequest, "Failed")
-		return ctrl.Result{}, nil
-	}
-
-	jobTemplate, err := r.CreateJobTemplate(&deploymentList.Items[0], *jobRequest)
+	jobTemplate, err := r.createJobTemplate(ctx, log, &resourceList.Items[0], *jobRequest)
 	if err != nil {
-		log.Error(err, "Failed to create Job Template")
-		r.setState(ctx, jobRequest, "Failed")
 		return ctrl.Result{}, nil
 	}
 
 	return r.handleState(ctx, log, jobRequest, jobTemplate)
 }
 
-func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
+func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, log logr.Logger, resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
 	targetContainer := retrieveContainerFromResource(resource, jobRequest)
 
 	if len(targetContainer) == 0 {
@@ -106,10 +97,25 @@ func (r *JobRequestReconciler) CreateJobTemplate(resource *appsv1.Deployment, jo
 	maps.Copy(job.ObjectMeta.Labels, resource.ObjectMeta.Labels)
 
 	if err := ctrl.SetControllerReference(&jobRequest, &job, r.Scheme); err != nil {
+		log.Error(err, "Failed to create Job Template")
+		r.setState(ctx, &jobRequest, "Failed")
 		return &job, err
 	}
 
 	return &job, nil
+}
+
+func (r *JobRequestReconciler) getJobRequest(ctx context.Context, log logr.Logger, namespaceName client.ObjectKey, jobRequest *platformv1.JobRequest) error {
+	err := r.CacheClient.Get(ctx, namespaceName, jobRequest)
+	if apierrors.IsNotFound(err) {
+		// If the custom resource is not found then it usually means that it was deleted or not created
+		// In this way, we will stop the reconciliation
+		log.Info("JobRequest resource not found. Ignoring since object must be deleted")
+		return err
+	}
+
+	log.Error(err, "Failed to get JobRequest")
+	return err
 }
 
 func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) []v1.Container {
@@ -150,8 +156,23 @@ func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platfor
 	r.CacheClient.Status().Update(ctx, jobRequest)
 }
 
-// SetupWithManager sets up the controller with the Manager.
-func (r *JobRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *JobRequestReconciler) getTargetResource(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest) (*ctrl.Result, *appsv1.DeploymentList) {
+	// TODO: this could be another resource like another Job
+	deploymentList := &appsv1.DeploymentList{}
+	opts := []client.ListOption{
+		client.MatchingFields{"metadata.name": jobRequest.Spec.ContainerFrom.PodSpecFrom.Name},
+	}
+
+	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
+		log.Error(err, "Failed to list Resources")
+		r.setState(ctx, jobRequest, "Failed")
+		return &ctrl.Result{}, nil
+	}
+
+	return nil, deploymentList
+}
+
+func (r *JobRequestReconciler) SetupControllerWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&platformv1.JobRequest{}).
 		Named("jobrequest").
