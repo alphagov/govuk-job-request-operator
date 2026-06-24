@@ -105,11 +105,13 @@ func (r *JobRequestReconciler) getJobRequest(ctx context.Context, log logr.Logge
 	err := r.CacheClient.Get(ctx, namespaceName, jobRequest)
 	if apierrors.IsNotFound(err) {
 		log.Error(err, "JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
+		r.setState(ctx, log, jobRequest, "Failed")
 		return err
 	}
 
 	if err != nil {
 		log.Error(err, "Failed to get JobRequest. Suspect the jobrequest is malformed")
+		r.setState(ctx, log, jobRequest, "Malformed")
 		return err
 	}
 
@@ -143,6 +145,8 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, log logr.Logger,
 			return ctrl.Result{}, err
 		}
 		r.setState(ctx, log, jobRequest, "Started")
+		return ctrl.Result{}, nil
+	case "Rejected", "Started", "Completed", "Malformed", "Failed":
 		return ctrl.Result{}, nil
 	default:
 		return ctrl.Result{}, nil
