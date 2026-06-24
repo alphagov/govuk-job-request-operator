@@ -35,10 +35,96 @@ import (
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 )
 
+func jobRequestBuilder(jobRequestName, resourceName, resourceNamespace, containerName string) *platformv1.JobRequest {
+	return &platformv1.JobRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobRequestName,
+			Namespace: resourceNamespace,
+		},
+		Spec: platformv1.JobRequestSpec{
+			ContainerFrom: platformv1.JobRequestContainerFrom{
+				PodSpecFrom: platformv1.JobRequestPodSpecFrom{
+					Group: "apps/v1",
+					Kind:  "Deployment",
+					Name:  resourceName,
+				},
+				ContainerName: containerName,
+			},
+			Command: "echo",
+			Args:    []string{"Hello, World!"},
+		},
+	}
+}
+
+func deploymentBuilder(resourceName, resourceNamespace string) *appsv1.Deployment {
+	var replicasNum int32 = 1
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      resourceName,
+			Namespace: resourceNamespace,
+			Annotations: map[string]string{
+				"foo": "bar",
+			},
+			Labels: map[string]string{
+				"fizz": "buzz",
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicasNum,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "foo",
+				},
+			},
+			Template: v1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": "foo",
+					},
+				},
+				Spec: v1.PodSpec{
+					RestartPolicy: "Always",
+					SecurityContext: &v1.PodSecurityContext{
+						RunAsUser:    ptr.To(int64(1001)),
+						RunAsGroup:   ptr.To(int64(1001)),
+						FSGroup:      ptr.To(int64(1001)),
+						RunAsNonRoot: ptr.To(true),
+						SeccompProfile: &v1.SeccompProfile{
+							Type: "RuntimeDefault",
+						},
+					},
+					Containers: []v1.Container{
+						{
+							Name:  "foo-container",
+							Image: "foo/bar",
+							Env: []v1.EnvVar{
+								{
+									Name:  "foo",
+									Value: "bar",
+								},
+							},
+							SecurityContext: &v1.SecurityContext{
+								AllowPrivilegeEscalation: ptr.To(false),
+								Capabilities: &v1.Capabilities{
+									Drop: []v1.Capability{
+										"all",
+									},
+								},
+								ReadOnlyRootFilesystem: ptr.To(true),
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 var _ = Describe("JobRequest Controller", func() {
 	Context("When reconciling a resource", func() {
 		resourceName := "sample"
 		resourceNamespace := "default"
+		containerName := "foo-container"
 
 		ctx := context.Background()
 
@@ -48,93 +134,14 @@ var _ = Describe("JobRequest Controller", func() {
 		}
 
 		It("should successfully reconcile. The JobRequest resource should be 'Approved' and the job created", func() {
-			var replicasNum int32 = 1
-
 			jobRequestStatus := platformv1.JobRequestStatus{
 				JobName:    resourceName,
 				State:      "Approved",
 				ReviewName: "test",
 			}
 
-			jobRequest := &platformv1.JobRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: platformv1.JobRequestSpec{
-					ContainerFrom: platformv1.JobRequestContainerFrom{
-						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
-							Group: "apps/v1",
-							Kind:  "Deployment",
-							Name:  resourceName,
-						},
-						ContainerName: "foo-container",
-					},
-					Command: "echo",
-					Args:    []string{"Hello, World!"},
-				},
-			}
-
-			targetResource := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-					Annotations: map[string]string{
-						"foo": "bar",
-					},
-					Labels: map[string]string{
-						"fizz": "buzz",
-					},
-				},
-				Spec: appsv1.DeploymentSpec{
-					Replicas: &replicasNum,
-					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": "foo",
-						},
-					},
-					Template: v1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								"app": "foo",
-							},
-						},
-						Spec: v1.PodSpec{
-							RestartPolicy: "Always",
-							SecurityContext: &v1.PodSecurityContext{
-								RunAsUser:    ptr.To(int64(1001)),
-								RunAsGroup:   ptr.To(int64(1001)),
-								FSGroup:      ptr.To(int64(1001)),
-								RunAsNonRoot: ptr.To(true),
-								SeccompProfile: &v1.SeccompProfile{
-									Type: "RuntimeDefault",
-								},
-							},
-							Containers: []v1.Container{
-								{
-									Name:  "foo-container",
-									Image: "foo/bar",
-									Env: []v1.EnvVar{
-										{
-											Name:  "foo",
-											Value: "bar",
-										},
-									},
-									SecurityContext: &v1.SecurityContext{
-										AllowPrivilegeEscalation: ptr.To(false),
-										Capabilities: &v1.Capabilities{
-											Drop: []v1.Capability{
-												"all",
-											},
-										},
-										ReadOnlyRootFilesystem: ptr.To(true),
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			jobRequest := jobRequestBuilder(resourceName, resourceName, resourceNamespace, containerName)
+			targetResource := deploymentBuilder(resourceName, resourceNamespace)
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
@@ -217,25 +224,7 @@ var _ = Describe("JobRequest Controller", func() {
 		})
 
 		It("should successfully reconcile if we cannot retrieve the target resource in the JobRequest from the cluster and the job should not be created", func() {
-			jobRequest := &platformv1.JobRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: platformv1.JobRequestSpec{
-					ContainerFrom: platformv1.JobRequestContainerFrom{
-						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
-							Group: "apps/v1",
-							Kind:  "Deployment",
-							Name:  "example-app",
-						},
-						ContainerName: "example-container",
-					},
-					Command: "echo",
-					Args:    []string{"Hello, World!"},
-				},
-			}
-
+			jobRequest := jobRequestBuilder(resourceName, "example-app", resourceNamespace, "example-container")
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
 			controllerReconciler := &JobRequestReconciler{
@@ -263,69 +252,9 @@ var _ = Describe("JobRequest Controller", func() {
 		})
 
 		It("should successfully reconcile even if the the target container in the target resource used to create the job from doesn't exist and don't create the job", func() {
-			var replicasNum int32 = 1
+			jobRequest := jobRequestBuilder(resourceName, resourceName, resourceNamespace, "non-existent-container")
 
-			jobRequest := &platformv1.JobRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: platformv1.JobRequestSpec{
-					ContainerFrom: platformv1.JobRequestContainerFrom{
-						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
-							Group: "apps/v1",
-							Kind:  "Deployment",
-							Name:  resourceName,
-						},
-						ContainerName: "non-existent-container",
-					},
-					Command: "echo",
-					Args:    []string{"Hello, World!"},
-				},
-			}
-
-			targetResource := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-					Annotations: map[string]string{
-						"foo": "bar",
-					},
-					Labels: map[string]string{
-						"fizz": "buzz",
-					},
-				},
-				Spec: appsv1.DeploymentSpec{
-					Replicas: &replicasNum,
-					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": "foo",
-						},
-					},
-					Template: v1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								"app": "foo",
-							},
-						},
-						Spec: v1.PodSpec{
-							RestartPolicy: "Always",
-							Containers: []v1.Container{
-								{
-									Name:  "not-this-one",
-									Image: "foo/bar",
-									Env: []v1.EnvVar{
-										{
-											Name:  "foo",
-											Value: "bar",
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			targetResource := deploymentBuilder(resourceName, resourceNamespace)
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 
@@ -359,87 +288,9 @@ var _ = Describe("JobRequest Controller", func() {
 		})
 
 		It("should successfully reconcile. The JobRequest resource should be 'Pending' and the job should not be created yet", func() {
-			var replicasNum int32 = 1
+			jobRequest := jobRequestBuilder(resourceName, resourceName, resourceNamespace, containerName)
 
-			jobRequest := &platformv1.JobRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: platformv1.JobRequestSpec{
-					ContainerFrom: platformv1.JobRequestContainerFrom{
-						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
-							Group: "apps/v1",
-							Kind:  "Deployment",
-							Name:  resourceName,
-						},
-						ContainerName: "foo-container",
-					},
-					Command: "echo",
-					Args:    []string{"Hello, World!"},
-				},
-			}
-
-			targetResource := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-					Annotations: map[string]string{
-						"foo": "bar",
-					},
-					Labels: map[string]string{
-						"fizz": "buzz",
-					},
-				},
-				Spec: appsv1.DeploymentSpec{
-					Replicas: &replicasNum,
-					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": "foo",
-						},
-					},
-					Template: v1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								"app": "foo",
-							},
-						},
-						Spec: v1.PodSpec{
-							RestartPolicy: "Always",
-							SecurityContext: &v1.PodSecurityContext{
-								RunAsUser:    ptr.To(int64(1001)),
-								RunAsGroup:   ptr.To(int64(1001)),
-								FSGroup:      ptr.To(int64(1001)),
-								RunAsNonRoot: ptr.To(true),
-								SeccompProfile: &v1.SeccompProfile{
-									Type: "RuntimeDefault",
-								},
-							},
-							Containers: []v1.Container{
-								{
-									Name:  "foo-container",
-									Image: "foo/bar",
-									Env: []v1.EnvVar{
-										{
-											Name:  "foo",
-											Value: "bar",
-										},
-									},
-									SecurityContext: &v1.SecurityContext{
-										AllowPrivilegeEscalation: ptr.To(false),
-										Capabilities: &v1.Capabilities{
-											Drop: []v1.Capability{
-												"all",
-											},
-										},
-										ReadOnlyRootFilesystem: ptr.To(true),
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			targetResource := deploymentBuilder(resourceName, resourceNamespace)
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
@@ -479,93 +330,14 @@ var _ = Describe("JobRequest Controller", func() {
 		})
 
 		It("should successfully reconcile. The JobRequest resource should be 'Rejected' and the job should not be created", func() {
-			var replicasNum int32 = 1
-
 			jobRequestStatus := platformv1.JobRequestStatus{
 				JobName:    resourceName,
 				State:      "Rejected",
 				ReviewName: "test",
 			}
+			jobRequest := jobRequestBuilder(resourceName, resourceName, resourceNamespace, containerName)
 
-			jobRequest := &platformv1.JobRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: platformv1.JobRequestSpec{
-					ContainerFrom: platformv1.JobRequestContainerFrom{
-						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
-							Group: "apps/v1",
-							Kind:  "Deployment",
-							Name:  resourceName,
-						},
-						ContainerName: "foo-container",
-					},
-					Command: "echo",
-					Args:    []string{"Hello, World!"},
-				},
-			}
-
-			targetResource := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-					Annotations: map[string]string{
-						"foo": "bar",
-					},
-					Labels: map[string]string{
-						"fizz": "buzz",
-					},
-				},
-				Spec: appsv1.DeploymentSpec{
-					Replicas: &replicasNum,
-					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": "foo",
-						},
-					},
-					Template: v1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								"app": "foo",
-							},
-						},
-						Spec: v1.PodSpec{
-							RestartPolicy: "Always",
-							SecurityContext: &v1.PodSecurityContext{
-								RunAsUser:    ptr.To(int64(1001)),
-								RunAsGroup:   ptr.To(int64(1001)),
-								FSGroup:      ptr.To(int64(1001)),
-								RunAsNonRoot: ptr.To(true),
-								SeccompProfile: &v1.SeccompProfile{
-									Type: "RuntimeDefault",
-								},
-							},
-							Containers: []v1.Container{
-								{
-									Name:  "foo-container",
-									Image: "foo/bar",
-									Env: []v1.EnvVar{
-										{
-											Name:  "foo",
-											Value: "bar",
-										},
-									},
-									SecurityContext: &v1.SecurityContext{
-										AllowPrivilegeEscalation: ptr.To(false),
-										Capabilities: &v1.Capabilities{
-											Drop: []v1.Capability{
-												"all",
-											},
-										},
-										ReadOnlyRootFilesystem: ptr.To(true),
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			targetResource := deploymentBuilder(resourceName, resourceNamespace)
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
@@ -607,93 +379,14 @@ var _ = Describe("JobRequest Controller", func() {
 		})
 
 		It("should successfully reconcile. The JobRequest resource should be 'Started' and the job should not be created again", func() {
-			var replicasNum int32 = 1
-
 			jobRequestStatus := platformv1.JobRequestStatus{
 				JobName:    resourceName,
 				State:      "Approved",
 				ReviewName: "test",
 			}
+			jobRequest := jobRequestBuilder(resourceName, resourceName, resourceNamespace, containerName)
 
-			jobRequest := &platformv1.JobRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: platformv1.JobRequestSpec{
-					ContainerFrom: platformv1.JobRequestContainerFrom{
-						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
-							Group: "apps/v1",
-							Kind:  "Deployment",
-							Name:  resourceName,
-						},
-						ContainerName: "foo-container",
-					},
-					Command: "echo",
-					Args:    []string{"Hello, World!"},
-				},
-			}
-
-			targetResource := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-					Annotations: map[string]string{
-						"foo": "bar",
-					},
-					Labels: map[string]string{
-						"fizz": "buzz",
-					},
-				},
-				Spec: appsv1.DeploymentSpec{
-					Replicas: &replicasNum,
-					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": "foo",
-						},
-					},
-					Template: v1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								"app": "foo",
-							},
-						},
-						Spec: v1.PodSpec{
-							RestartPolicy: "Always",
-							SecurityContext: &v1.PodSecurityContext{
-								RunAsUser:    ptr.To(int64(1001)),
-								RunAsGroup:   ptr.To(int64(1001)),
-								FSGroup:      ptr.To(int64(1001)),
-								RunAsNonRoot: ptr.To(true),
-								SeccompProfile: &v1.SeccompProfile{
-									Type: "RuntimeDefault",
-								},
-							},
-							Containers: []v1.Container{
-								{
-									Name:  "foo-container",
-									Image: "foo/bar",
-									Env: []v1.EnvVar{
-										{
-											Name:  "foo",
-											Value: "bar",
-										},
-									},
-									SecurityContext: &v1.SecurityContext{
-										AllowPrivilegeEscalation: ptr.To(false),
-										Capabilities: &v1.Capabilities{
-											Drop: []v1.Capability{
-												"all",
-											},
-										},
-										ReadOnlyRootFilesystem: ptr.To(true),
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			targetResource := deploymentBuilder(resourceName, resourceNamespace)
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
@@ -750,93 +443,14 @@ var _ = Describe("JobRequest Controller", func() {
 		})
 
 		It("should successfully reconcile. The JobRequest resource should be 'Failed' and the job should not be created", func() {
-			var replicasNum int32 = 1
-
 			jobRequestStatus := platformv1.JobRequestStatus{
 				JobName:    resourceName,
 				State:      "Failed",
 				ReviewName: "test",
 			}
+			jobRequest := jobRequestBuilder(resourceName, resourceName, resourceNamespace, containerName)
 
-			jobRequest := &platformv1.JobRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-				},
-				Spec: platformv1.JobRequestSpec{
-					ContainerFrom: platformv1.JobRequestContainerFrom{
-						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
-							Group: "apps/v1",
-							Kind:  "Deployment",
-							Name:  resourceName,
-						},
-						ContainerName: "foo-container",
-					},
-					Command: "echo",
-					Args:    []string{"Hello, World!"},
-				},
-			}
-
-			targetResource := &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      resourceName,
-					Namespace: resourceNamespace,
-					Annotations: map[string]string{
-						"foo": "bar",
-					},
-					Labels: map[string]string{
-						"fizz": "buzz",
-					},
-				},
-				Spec: appsv1.DeploymentSpec{
-					Replicas: &replicasNum,
-					Selector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							"app": "foo",
-						},
-					},
-					Template: v1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								"app": "foo",
-							},
-						},
-						Spec: v1.PodSpec{
-							RestartPolicy: "Always",
-							SecurityContext: &v1.PodSecurityContext{
-								RunAsUser:    ptr.To(int64(1001)),
-								RunAsGroup:   ptr.To(int64(1001)),
-								FSGroup:      ptr.To(int64(1001)),
-								RunAsNonRoot: ptr.To(true),
-								SeccompProfile: &v1.SeccompProfile{
-									Type: "RuntimeDefault",
-								},
-							},
-							Containers: []v1.Container{
-								{
-									Name:  "foo-container",
-									Image: "foo/bar",
-									Env: []v1.EnvVar{
-										{
-											Name:  "foo",
-											Value: "bar",
-										},
-									},
-									SecurityContext: &v1.SecurityContext{
-										AllowPrivilegeEscalation: ptr.To(false),
-										Capabilities: &v1.Capabilities{
-											Drop: []v1.Capability{
-												"all",
-											},
-										},
-										ReadOnlyRootFilesystem: ptr.To(true),
-									},
-								},
-							},
-						},
-					},
-				},
-			}
+			targetResource := deploymentBuilder(resourceName, resourceNamespace)
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
