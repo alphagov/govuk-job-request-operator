@@ -47,7 +47,7 @@ var _ = Describe("JobRequest Controller", func() {
 			Namespace: resourceNamespace,
 		}
 
-		It("should successfully reconcile. The primary resource should be approved and created", func() {
+		It("should successfully reconcile. The primary resource should be approved and the job created", func() {
 			var replicasNum int32 = 1
 
 			jobRequestStatus := platformv1.JobRequestStatus{
@@ -350,10 +350,152 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(actualFailedJobRequest.Status.State).To(Equal("Failed"))
 
 			By("Cleanup the JobRequest and Deployment")
+			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
 		})
 
-		// TODO: Test that jobRequest state is 'requested'
+		It("should successfully reconcile. The primary resource should be 'Pending' and the job should not be created yet", func() {
+			var replicasNum int32 = 1
+
+			jobRequest := &platformv1.JobRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: resourceNamespace,
+				},
+				Spec: platformv1.JobRequestSpec{
+					ContainerFrom: platformv1.JobRequestContainerFrom{
+						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
+							Group: "apps/v1",
+							Kind:  "Deployment",
+							Name:  resourceName,
+						},
+						ContainerName: "foo-container",
+					},
+					Command: "echo",
+					Args:    []string{"Hello, World!"},
+				},
+			}
+
+			targetResource := &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: resourceNamespace,
+					Annotations: map[string]string{
+						"foo": "bar",
+					},
+					Labels: map[string]string{
+						"fizz": "buzz",
+					},
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: &replicasNum,
+					Selector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app": "foo",
+						},
+					},
+					Template: v1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Labels: map[string]string{
+								"app": "foo",
+							},
+						},
+						Spec: v1.PodSpec{
+							RestartPolicy: "Always",
+							SecurityContext: &v1.PodSecurityContext{
+								RunAsUser:    ptr.To(int64(1001)),
+								RunAsGroup:   ptr.To(int64(1001)),
+								FSGroup:      ptr.To(int64(1001)),
+								RunAsNonRoot: ptr.To(true),
+								SeccompProfile: &v1.SeccompProfile{
+									Type: "RuntimeDefault",
+								},
+							},
+							Containers: []v1.Container{
+								{
+									Name:  "foo-container",
+									Image: "foo/bar",
+									Env: []v1.EnvVar{
+										{
+											Name:  "foo",
+											Value: "bar",
+										},
+									},
+									SecurityContext: &v1.SecurityContext{
+										AllowPrivilegeEscalation: ptr.To(false),
+										Capabilities: &v1.Capabilities{
+											Drop: []v1.Capability{
+												"all",
+											},
+										},
+										ReadOnlyRootFilesystem: ptr.To(true),
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+			actualApprovedJobRequest := &platformv1.JobRequest{}
+			k8sClient.Get(ctx, typeNamespacedName, actualApprovedJobRequest)
+
+			Expect(actualApprovedJobRequest.Status.State).To(Equal(""))
+
+			controllerReconciler := &JobRequestReconciler{
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			jobList := &batch.JobList{}
+			opts := []client.ListOption{
+				client.MatchingFields{"metadata.name": resourceName},
+			}
+			k8sApiReader.List(ctx, jobList, opts...)
+
+			Expect(len(jobList.Items)).To(BeNumerically("==", 1))
+			Expect(jobList.Items[0].GetName()).To(Equal(resourceName))
+			Expect(jobList.Items[0].GetNamespace()).To(Equal(resourceNamespace))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Name).To(Equal("foo-container"))
+			Expect(len(jobList.Items[0].Spec.Template.Spec.Containers)).To(BeNumerically("==", 1))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Image).To(Equal("foo/bar"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("foo"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("bar"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(ptr.To(false)))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop[0]).To(BeEquivalentTo("all"))
+			Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem).To(Equal(ptr.To(true)))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(Equal(ptr.To(true)))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(Equal(ptr.To(int64(1001))))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsGroup).To(Equal(ptr.To(int64(1001))))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(ptr.To(int64(1001))))
+			Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(BeEquivalentTo("RuntimeDefault"))
+			Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
+			Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
+			Expect(jobList.Items[0].Labels["fizz"]).To(Equal("buzz"))
+
+			actualStartedJobRequest := &platformv1.JobRequest{}
+			k8sClient.Get(ctx, typeNamespacedName, actualStartedJobRequest)
+
+			Expect(actualStartedJobRequest.Status.State).To(Equal("Pending"))
+
+			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()).NotTo(BeNil())
+			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(resourceName))
+			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Kind).To(Equal("JobRequest"))
+
+			By("Cleanup the JobRequest, Deployment and Job")
+			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, &jobList.Items[0])).To(Succeed())
+		})
 
 		// TODO: Make additional state on JobRequest state for 'malformed' to distinguish from 'failed'
 		// TODO: Test the handleState function
