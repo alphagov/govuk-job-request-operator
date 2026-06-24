@@ -47,7 +47,7 @@ var _ = Describe("JobRequest Controller", func() {
 			Namespace: resourceNamespace,
 		}
 
-		It("should successfully reconcile. The primary resource should be approved and the job created", func() {
+		It("should successfully reconcile. The JobRequest resource should be 'Approved' and the job created", func() {
 			var replicasNum int32 = 1
 
 			jobRequestStatus := platformv1.JobRequestStatus{
@@ -354,7 +354,7 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
 		})
 
-		It("should successfully reconcile. The primary resource should be 'Pending' and the job should not be created yet", func() {
+		It("should successfully reconcile. The JobRequest resource should be 'Pending' and the job should not be created yet", func() {
 			var replicasNum int32 = 1
 
 			jobRequest := &platformv1.JobRequest{
