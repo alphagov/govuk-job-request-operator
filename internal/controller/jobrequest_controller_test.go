@@ -74,12 +74,6 @@ var _ = Describe("JobRequest Controller", func() {
 					Command: "echo",
 					Args:    []string{"Hello, World!"},
 				},
-				Status: platformv1.JobRequestStatus{
-					JobName:     "sample",
-					State:       "Approved",
-					ReviewName:  "foo",
-					RequestedBy: "arn://foobar",
-				},
 			}
 
 			targetResource := &appsv1.Deployment{
@@ -148,6 +142,11 @@ var _ = Describe("JobRequest Controller", func() {
 			jobRequest.Status = jobRequestStatus
 			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
 
+			actualApprovedJobRequest := &platformv1.JobRequest{}
+			k8sClient.Get(ctx, typeNamespacedName, actualApprovedJobRequest)
+
+			Expect(actualApprovedJobRequest.Status.State).To(Equal("Approved"))
+
 			controllerReconciler := &JobRequestReconciler{
 				CacheClient:     k8sClient,
 				ApiServerClient: k8sApiReader,
@@ -185,11 +184,14 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
 			Expect(jobList.Items[0].Labels["fizz"]).To(Equal("buzz"))
 
+			actualStartedJobRequest := &platformv1.JobRequest{}
+			k8sClient.Get(ctx, typeNamespacedName, actualStartedJobRequest)
+
+			Expect(actualStartedJobRequest.Status.State).To(Equal("Started"))
+
 			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()).NotTo(BeNil())
 			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(resourceName))
 			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Kind).To(Equal("JobRequest"))
-
-			//TODO: that jobRequest state is 'Started'
 
 			By("Cleanup the JobRequest, Deployment and Job")
 			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
@@ -211,7 +213,6 @@ var _ = Describe("JobRequest Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		//TODO: Make assertions that jobRequest is set to 'failed'
 		It("should successfully reconcile if we cannot retrieve the target resource in the jobRequest from the cluster", func() {
 			jobRequest := &platformv1.JobRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -240,23 +241,26 @@ var _ = Describe("JobRequest Controller", func() {
 				Scheme:          k8sClient.Scheme(),
 			}
 
+			actualJobRequest := &platformv1.JobRequest{}
+			k8sClient.Get(ctx, typeNamespacedName, actualJobRequest)
+
+			Expect(actualJobRequest.Status.State).To(Equal(""))
+
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
+			actualFailedJobRequest := &platformv1.JobRequest{}
+			k8sClient.Get(ctx, typeNamespacedName, actualFailedJobRequest)
+
+			Expect(actualFailedJobRequest.Status.State).To(Equal("Failed"))
 
 			By("Cleanup the JobRequest")
 			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
 		})
 
-		// TODO: Rewrite test name
-		//TODO: Make assertions that jobRequest is set to 'failed'
-		It("should successfully reconcile even if the container in the resource reference from the jobRequest doesn't exist", func() {
+		It("should successfully reconcile even if the the target container in the target resource to create the job from doesn't exist", func() {
 			var replicasNum int32 = 1
-			containerName := "example-container"
-			targetContainerName := "foo-container"
-			resourceName := "test-resource"
-			resourceNamespace := "default"
 
 			jobRequest := &platformv1.JobRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -268,9 +272,9 @@ var _ = Describe("JobRequest Controller", func() {
 						PodSpecFrom: platformv1.JobRequestPodSpecFrom{
 							Group: "apps/v1",
 							Kind:  "Deployment",
-							Name:  "example-app",
+							Name:  resourceName,
 						},
-						ContainerName: containerName,
+						ContainerName: "non-existent-container",
 					},
 					Command: "echo",
 					Args:    []string{"Hello, World!"},
@@ -305,7 +309,7 @@ var _ = Describe("JobRequest Controller", func() {
 							RestartPolicy: "Always",
 							Containers: []v1.Container{
 								{
-									Name:  targetContainerName,
+									Name:  "not-this-one",
 									Image: "foo/bar",
 									Env: []v1.EnvVar{
 										{
@@ -321,6 +325,7 @@ var _ = Describe("JobRequest Controller", func() {
 			}
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
 			controllerReconciler := &JobRequestReconciler{
@@ -329,21 +334,30 @@ var _ = Describe("JobRequest Controller", func() {
 				Scheme:          k8sClient.Scheme(),
 			}
 
+			actualJobRequest := &platformv1.JobRequest{}
+			k8sClient.Get(ctx, typeNamespacedName, actualJobRequest)
+
+			Expect(actualJobRequest.Status.State).To(Equal(""))
+
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: typeNamespacedName,
 			})
 
 			Expect(err).NotTo(HaveOccurred())
 
+			actualFailedJobRequest := &platformv1.JobRequest{}
+			k8sClient.Get(ctx, typeNamespacedName, actualFailedJobRequest)
+
+			Expect(actualFailedJobRequest.Status.State).To(Equal("Failed"))
+
 			By("Cleanup the JobRequest and Deployment")
 			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
-			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
 		})
 
-		//TODO: Test that jobRequest state is 'requested'
+		// TODO: Test that jobRequest state is 'requested'
 
-		//TODO: Make additional state on JobRequest state for 'malformed' to distinguish from 'failed'
-		//TODO: Change 'Requested' to 'Pending'
-		//TODO: Test the handleState function
+		// TODO: Make additional state on JobRequest state for 'malformed' to distinguish from 'failed'
+		// TODO: Change 'Requested' to 'Pending'
+		// TODO: Test the handleState function
 	})
 })
