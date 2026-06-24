@@ -51,7 +51,7 @@ type JobRequestSpec struct {
 type JobRequestStatus struct {
 	// Name of the Kubernetes Job created for this job request.
 	JobName string `json:"jobName,omitempty"`
-	// +kubebuilder:validation:Enum=Pending;Approved;Rejected;Started;Completed;Failed
+	// +kubebuilder:validation:Enum=Pending;Approved;Rejected;Started;Completed;Failed;Malformed
 	State string `json:"state,omitempty"`
 	// Name of the JobRequestReview resource that reviewed this job request.
 	ReviewName string `json:"reviewName,omitempty"`

@@ -119,6 +119,7 @@ spec:
                 - Started
                 - Completed
                 - Failed
+                - Malformed
                 type: string
             type: object
         required:
