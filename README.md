@@ -24,7 +24,7 @@ kind: JobRequest
 metadata:
   name: something
   annotations:
-    requestedBy: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
+    platform.publishing.service.gov.uk/requested-by: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
 spec:
   containerFrom:
     podSpecFrom:
