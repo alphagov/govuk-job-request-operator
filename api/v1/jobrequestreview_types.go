@@ -24,7 +24,7 @@ import (
 type JobRequestReviewSpec struct {
 	// Name of the JobRequest resource being reviewed.
 	JobRequestName string `json:"jobRequestName"`
-	// +kubebuilder:validation:Enum=Approved;Rejected
+	// +kubebuilder:validation:Enum=Approved;Rejected;Pending
 	Decision string `json:"decision"`
 	// A description of the review decision.
 	// +optional

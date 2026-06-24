@@ -51,10 +51,8 @@ type JobRequestSpec struct {
 type JobRequestStatus struct {
 	// Name of the Kubernetes Job created for this job request.
 	JobName string `json:"jobName,omitempty"`
-	// +kubebuilder:validation:Enum=Requested;Approved;Rejected;Started;Completed;Failed
+	// +kubebuilder:validation:Enum=Pending;Approved;Rejected;Started;Completed;Failed
 	State string `json:"state,omitempty"`
-	// Kubernetes username of the user who made the job request.
-	RequestedBy string `json:"requestedBy,omitempty"`
 	// Name of the JobRequestReview resource that reviewed this job request.
 	ReviewName string `json:"reviewName,omitempty"`
 }
@@ -66,7 +64,6 @@ type JobRequestStatus struct {
 // +kubebuilder:printcolumn:name="Arguments",type=string,JSONPath=`.spec.args`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="Job Name",type=string,JSONPath=`.status.jobName`
-// +kubebuilder:printcolumn:name="Requested By",type=string,JSONPath=`.status.requestedBy`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // JobRequest represents a request to run a command in the cluster.

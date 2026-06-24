@@ -59,6 +59,7 @@ spec:
                 enum:
                 - Approved
                 - Rejected
+                - Pending
                 type: string
               description:
                 description: A description of the review decision.

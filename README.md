@@ -23,6 +23,8 @@ apiVersion: platform.publishing.service.gov.uk/v1
 kind: JobRequest
 metadata:
   name: something
+  annotations:
+    requestedBy: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
 spec:
   containerFrom:
     podSpecFrom:
@@ -34,7 +36,6 @@ spec:
   args: [ "some:task", "some-arg" ]
 status:
   jobName: jr-something
-  requestedBy: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
   reviewName: something-approval
   state: Started
 ```

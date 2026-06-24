@@ -29,9 +29,6 @@ spec:
     - jsonPath: .status.jobName
       name: Job Name
       type: string
-    - jsonPath: .status.requestedBy
-      name: Requested By
-      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -110,16 +107,13 @@ spec:
               jobName:
                 description: Name of the Kubernetes Job created for this job request.
                 type: string
-              requestedBy:
-                description: Kubernetes username of the user who made the job request.
-                type: string
               reviewName:
                 description: Name of the JobRequestReview resource that reviewed this
                   job request.
                 type: string
               state:
                 enum:
-                - Requested
+                - Pending
                 - Approved
                 - Rejected
                 - Started
