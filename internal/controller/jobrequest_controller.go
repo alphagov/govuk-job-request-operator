@@ -73,7 +73,10 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, log logr.L
 	targetContainer := retrieveContainerFromResource(resource, jobRequest)
 
 	if len(targetContainer) == 0 {
-		return nil, errors.New("container not found in resource")
+		err := errors.New("container not found in resource")
+		log.Error(err, "Target container, to create the job from is not found in target resource")
+		r.setState(ctx, log, &jobRequest, "Failed")
+		return nil, err
 	}
 
 	job := batch.Job{}
@@ -102,11 +105,11 @@ func (r *JobRequestReconciler) getJobRequest(ctx context.Context, log logr.Logge
 	err := r.CacheClient.Get(ctx, namespaceName, jobRequest)
 	if apierrors.IsNotFound(err) {
 		log.Error(err, "JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
-		return nil
+		return err
 	}
 
 	if err != nil {
-		log.Error(err, "Failed to get JobRequest")
+		log.Error(err, "Failed to get JobRequest. Suspect the jobrequest is malformed")
 		return err
 	}
 
