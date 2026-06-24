@@ -13,7 +13,6 @@ brew install k3d
 ```
 
 ### Custom Resource Definitions (CRDs)
-
 #### JobRequest
 
 A `JobRequest` represents a request to run a command/job.
@@ -50,12 +49,14 @@ apiVersion: platform.publishing.service.gov.uk/v1
 kind: JobRequestReview
 metadata:
   name: something-approval
+  annotations:
+    platform.publishing.service.gov.uk/reviewed-by: arn:aws:sts::123456789:assumed-role/otheruser.name-platformengineer/environment-platformengineer
 spec:
   jobRequestName: something
   decision: Approved
   description: "LGTM"
 status:
-  reviewedBy: arn:aws:sts::123456789:assumed-role/otheruser.name-platformengineer/environment-platformengineer
+  state: Approved
 ```
 
 ### Create and generate the manifests

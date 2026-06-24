@@ -33,8 +33,8 @@ type JobRequestReviewSpec struct {
 
 // JobRequestReviewStatus defines the observed state of JobRequestReview.
 type JobRequestReviewStatus struct {
-	// Kubernetes username of the reviewer.
-	ReviewedBy string `json:"reviewedBy,omitempty"`
+	// +kubebuilder:validation:Enum=Approved;Rejected;JobRequestMalformed;JobRequestNotFound
+	State string `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true

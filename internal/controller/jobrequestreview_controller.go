@@ -27,6 +27,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
+	"github.com/go-logr/logr"
 )
 
 // JobRequestReviewReconciler reconciles a JobRequestReview object
@@ -58,43 +59,71 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	// Attempt to retrieve JobRequest object and if not stop reconcile and add something to the CRD to indicate a failure
-	jobRequest := &platformv1.JobRequest{}
-	// Compose namespace with jobRequest.Name instead of req.NamespacedName
-	err = r.Get(ctx, req.NamespacedName, jobRequest)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// If the custom resource is not found then it usually means that it was deleted or not created
-			// In this way, we will stop the reconciliation
-			log.Error(err, "JobRequest resource not found. Ignoring since object must be deleted")
-			return ctrl.Result{}, nil
-		}
-		// Error reading the object
-		log.Error(err, "Failed to get JobRequest")
-		return ctrl.Result{}, nil
+	resourceResult, jobRequestList := r.getJobRequest(ctx, log, jobRequestReview)
+	if resourceResult != nil {
+		return *resourceResult, nil
 	}
+
+	jobRequest := &jobRequestList.Items[0]
 
 	// If state is nil then reschedule as jobRequest object isn't setup yet
 	if jobRequest.Status.State == "" {
+		log.Info("JobRequest hasn't finished creating so requeueing the reconcile")
 		// Requeue the reconcile after certain time
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
 	}
 
-	// If state is failed then stop reconcile and add something to the JobRequestReview to indicate a failure
-	if jobRequest.Status.State == "Failed" {
-		// Create an error and log it
-		log.Error(err, "JobRequest is in a Failed state so can't approve")
+	// If JobRequest is in Malformed state then set JobRequestReview as Malformed
+	if jobRequest.Status.State == "Malformed" {
+		log.Error(err, "JobRequest is in a Malformed state so can't approve")
+		jobRequestReview.Status.State = "JobRequestMalformed"
+		err := r.Status().Update(ctx, jobRequestReview)
+		if err != nil {
+			log.Error(err, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
+		}
 		return ctrl.Result{}, nil
 	}
 
+	// Set JobRequest status and review name and update the status
+	jobRequestReview.Status.State = jobRequestReview.Spec.Decision
 	jobRequest.Status.State = jobRequestReview.Spec.Decision
-	// Do we need to recover the object again before flushing the state?
-	r.Status().Update(ctx, jobRequest)
+	jobRequest.Status.ReviewName = jobRequestReview.GetName()
+	err = r.Status().Update(ctx, jobRequest)
+	if err != nil {
+		log.Error(err, "Failed to update status of JobRequest", "errored_obj", jobRequest)
+	}
+
+	err = r.Status().Update(ctx, jobRequestReview)
+	if err != nil {
+		log.Error(err, "Failed to update status of JobRequestReview", "errored_obj", jobRequest)
+	}
 
 	return ctrl.Result{}, nil
 }
 
+func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, log logr.Logger, jobRequestReview *platformv1.JobRequestReview) (*ctrl.Result, *platformv1.JobRequestList) {
+	jobRequestlist := &platformv1.JobRequestList{}
+	opts := []client.ListOption{
+		client.MatchingFields{"metadata.name": jobRequestReview.GetName()},
+	}
+
+	// Retrieve the corresponding JobRequest object
+	if err := r.List(ctx, jobRequestlist, opts...); err != nil || len(jobRequestlist.Items) == 0 {
+		jobRequestReview.Status.State = "JobRequestNotFound"
+		err := r.Status().Update(ctx, jobRequestReview)
+		if err != nil {
+			log.Error(err, "Failed to UPDATE JobRequestReview resource", "errored_obj", jobRequestReview)
+		}
+
+		log.Error(err, "Failed to retrieve JobRequest")
+		return &ctrl.Result{}, nil
+	}
+
+	return nil, jobRequestlist
+}
+
 // SetupWithManager sets up the controller with the Manager.
-func (r *JobRequestReviewReconciler) SetupWithManager(mgr ctrl.Manager) error {
+func (r *JobRequestReviewReconciler) SetupControllerWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&platformv1.JobRequestReview{}).
 		Named("jobrequestreview").

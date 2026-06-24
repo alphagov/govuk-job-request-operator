@@ -74,8 +74,12 @@ spec:
           status:
             description: status defines the observed state of JobRequestReview
             properties:
-              reviewedBy:
-                description: Kubernetes username of the reviewer.
+              state:
+                enum:
+                - Approved
+                - Rejected
+                - JobRequestMalformed
+                - JobRequestNotFound
                 type: string
             type: object
         required:
