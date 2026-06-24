@@ -133,7 +133,7 @@ func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platf
 func (r *JobRequestReconciler) handleState(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest, jobTemplate client.Object) (ctrl.Result, error) {
 	switch jobRequest.Status.State {
 	case "":
-		r.setState(ctx, log, jobRequest, "Requested")
+		r.setState(ctx, log, jobRequest, "Pending")
 		return ctrl.Result{}, nil
 	case "Approved":
 		err := r.CacheClient.Create(ctx, jobTemplate)

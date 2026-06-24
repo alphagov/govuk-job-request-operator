@@ -51,10 +51,9 @@ var _ = Describe("JobRequest Controller", func() {
 			var replicasNum int32 = 1
 
 			jobRequestStatus := platformv1.JobRequestStatus{
-				JobName:     resourceName,
-				State:       "Approved",
-				ReviewName:  "test",
-				RequestedBy: "arn",
+				JobName:    resourceName,
+				State:      "Approved",
+				ReviewName: "test",
 			}
 
 			jobRequest := &platformv1.JobRequest{
@@ -357,7 +356,6 @@ var _ = Describe("JobRequest Controller", func() {
 		// TODO: Test that jobRequest state is 'requested'
 
 		// TODO: Make additional state on JobRequest state for 'malformed' to distinguish from 'failed'
-		// TODO: Change 'Requested' to 'Pending'
 		// TODO: Test the handleState function
 	})
 })
