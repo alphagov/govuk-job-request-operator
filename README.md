@@ -13,7 +13,6 @@ brew install k3d
 ```
 
 ### Custom Resource Definitions (CRDs)
-
 #### JobRequest
 
 A `JobRequest` represents a request to run a command/job.
