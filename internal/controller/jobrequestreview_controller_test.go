@@ -64,7 +64,7 @@ var _ = Describe("JobRequestReview Controller", func() {
 					},
 				},
 				Spec: platformv1.JobRequestReviewSpec{
-					JobRequestName: "example",
+					JobRequestName: resourceName,
 					Decision:       "Approved",
 					Description:    "A description",
 				},
@@ -100,7 +100,7 @@ var _ = Describe("JobRequestReview Controller", func() {
 					},
 				},
 				Spec: platformv1.JobRequestReviewSpec{
-					JobRequestName: "example",
+					JobRequestName: resourceName,
 					Decision:       "Approved",
 					Description:    "A description",
 				},
@@ -158,7 +158,7 @@ var _ = Describe("JobRequestReview Controller", func() {
 					},
 				},
 				Spec: platformv1.JobRequestReviewSpec{
-					JobRequestName: "example",
+					JobRequestName: resourceName,
 					Decision:       "Approved",
 					Description:    "A description",
 				},
@@ -296,7 +296,7 @@ var _ = Describe("JobRequestReview Controller", func() {
 					},
 				},
 				Spec: platformv1.JobRequestReviewSpec{
-					JobRequestName: "example",
+					JobRequestName: resourceName,
 					Decision:       "Rejected",
 					Description:    "A description",
 				},

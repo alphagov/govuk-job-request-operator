@@ -74,7 +74,7 @@ func (r *JobRequestReviewReconciler) getJobRequestReview(ctx context.Context, na
 func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) (*ctrl.Result, *platformv1.JobRequest) {
 	requestList := &platformv1.JobRequestList{}
 	opts := []client.ListOption{
-		client.MatchingFields{"metadata.name": jobRequestReview.GetName()},
+		client.MatchingFields{"metadata.name": jobRequestReview.Spec.JobRequestName},
 	}
 
 	if err := r.List(ctx, requestList, opts...); err != nil || len(requestList.Items) == 0 {
@@ -96,6 +96,7 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 	case "":
 		r.Log.Info("JobRequest hasn't finished creating so re-queueing the reconcile")
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
+
 	case "Malformed":
 		err := errors.New("JobRequest body Malformed")
 		r.Log.Error(err, "JobRequest is in a Malformed state so can't approve")
@@ -106,7 +107,8 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 			r.Log.Error(err, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
 		}
 		return ctrl.Result{}, nil
-	default:
+
+	case "Pending":
 		jobRequestReview.Status.State = jobRequestReview.Spec.Decision
 		jobRequest.Status.State = jobRequestReview.Spec.Decision
 		jobRequest.Status.ReviewName = jobRequestReview.GetName()
@@ -123,6 +125,13 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 
 		return ctrl.Result{}, nil
 
+	case "Approved", "Rejected", "Started", "Failed", "Completed":
+		err := errors.New("This code path should not be reached. Suspect invalid state passed to the controller")
+		r.Log.Error(err, err.Error())
+		return ctrl.Result{}, nil
+
+	default:
+		return ctrl.Result{}, nil
 	}
 }
 
