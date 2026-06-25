@@ -18,22 +18,22 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	"github.com/go-logr/logr"
 )
 
-// JobRequestReviewReconciler reconciles a JobRequestReview object
 type JobRequestReviewReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	Log    logr.Logger
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequestreviews,verbs=get;list;watch;create;update;patch;delete
@@ -41,88 +41,91 @@ type JobRequestReviewReconciler struct {
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequestreviews/finalizers,verbs=update
 
 func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-
-	// Attempt to retrieve JobRequestReview object and if not stop reconcile
 	jobRequestReview := &platformv1.JobRequestReview{}
-	err := r.Get(ctx, req.NamespacedName, jobRequestReview)
+
+	err := r.getJobRequestReview(ctx, req.NamespacedName, jobRequestReview)
 	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// If the custom resource is not found then it usually means that it was deleted or not created
-			// In this way, we will stop the reconciliation
-			log.Info("JobRequestReview resource not found. Ignoring since object must be deleted")
-			return ctrl.Result{}, nil
-		}
-		// Error reading the object
-		log.Error(err, "Failed to get JobRequestReview")
 		return ctrl.Result{}, nil
 	}
 
-	// Attempt to retrieve JobRequest object and if not stop reconcile and add something to the CRD to indicate a failure
-	resourceResult, jobRequestList := r.getJobRequest(ctx, log, jobRequestReview)
+	resourceResult, jobRequest := r.getJobRequest(ctx, jobRequestReview)
 	if resourceResult != nil {
 		return *resourceResult, nil
 	}
 
-	jobRequest := &jobRequestList.Items[0]
-
-	// If state is nil then reschedule as jobRequest object isn't setup yet
-	if jobRequest.Status.State == "" {
-		log.Info("JobRequest hasn't finished creating so requeueing the reconcile")
-		// Requeue the reconcile after certain time
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
-	}
-
-	// If JobRequest is in Malformed state then set JobRequestReview as Malformed
-	if jobRequest.Status.State == "Malformed" {
-		log.Error(err, "JobRequest is in a Malformed state so can't approve")
-		jobRequestReview.Status.State = "JobRequestMalformed"
-		err := r.Status().Update(ctx, jobRequestReview)
-		if err != nil {
-			log.Error(err, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
-		}
-		return ctrl.Result{}, nil
-	}
-
-	// Set JobRequest status and review name and update the status
-	jobRequestReview.Status.State = jobRequestReview.Spec.Decision
-	jobRequest.Status.State = jobRequestReview.Spec.Decision
-	jobRequest.Status.ReviewName = jobRequestReview.GetName()
-	err = r.Status().Update(ctx, jobRequest)
-	if err != nil {
-		log.Error(err, "Failed to update status of JobRequest", "errored_obj", jobRequest)
-	}
-
-	err = r.Status().Update(ctx, jobRequestReview)
-	if err != nil {
-		log.Error(err, "Failed to update status of JobRequestReview", "errored_obj", jobRequest)
-	}
-
-	return ctrl.Result{}, nil
+	return r.handleState(ctx, jobRequest, jobRequestReview)
 }
 
-func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, log logr.Logger, jobRequestReview *platformv1.JobRequestReview) (*ctrl.Result, *platformv1.JobRequestList) {
-	jobRequestlist := &platformv1.JobRequestList{}
+func (r *JobRequestReviewReconciler) getJobRequestReview(ctx context.Context, namespaceName client.ObjectKey, jobRequestReview *platformv1.JobRequestReview) error {
+	err := r.Get(ctx, namespaceName, jobRequestReview)
+	if apierrors.IsNotFound(err) {
+		r.Log.Info("JobRequestReview resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
+		return err
+	}
+
+	if err != nil {
+		r.Log.Error(err, "Failed to get JobRequestReview")
+		return err
+	}
+
+	return nil
+}
+
+func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) (*ctrl.Result, *platformv1.JobRequest) {
+	requestList := &platformv1.JobRequestList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"metadata.name": jobRequestReview.GetName()},
 	}
 
-	// Retrieve the corresponding JobRequest object
-	if err := r.List(ctx, jobRequestlist, opts...); err != nil || len(jobRequestlist.Items) == 0 {
+	if err := r.List(ctx, requestList, opts...); err != nil || len(requestList.Items) == 0 {
 		jobRequestReview.Status.State = "JobRequestNotFound"
 		err := r.Status().Update(ctx, jobRequestReview)
 		if err != nil {
-			log.Error(err, "Failed to UPDATE JobRequestReview resource", "errored_obj", jobRequestReview)
+			r.Log.Error(err, "Failed to UPDATE JobRequestReview resource", "errored_obj", jobRequestReview)
 		}
 
-		log.Error(err, "Failed to retrieve JobRequest")
+		r.Log.Error(err, "Failed to retrieve JobRequest")
 		return &ctrl.Result{}, nil
 	}
 
-	return nil, jobRequestlist
+	return nil, &requestList.Items[0]
 }
 
-// SetupWithManager sets up the controller with the Manager.
+func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest *platformv1.JobRequest, jobRequestReview *platformv1.JobRequestReview) (ctrl.Result, error) {
+	switch jobRequest.Status.State {
+	case "":
+		r.Log.Info("JobRequest hasn't finished creating so re-queueing the reconcile")
+		return ctrl.Result{RequeueAfter: time.Minute}, nil
+	case "Malformed":
+		err := errors.New("JobRequest body Malformed")
+		r.Log.Error(err, "JobRequest is in a Malformed state so can't approve")
+		jobRequestReview.Status.State = "JobRequestMalformed"
+
+		updateErr := r.Status().Update(ctx, jobRequestReview)
+		if updateErr != nil {
+			r.Log.Error(err, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
+		}
+		return ctrl.Result{}, nil
+	default:
+		jobRequestReview.Status.State = jobRequestReview.Spec.Decision
+		jobRequest.Status.State = jobRequestReview.Spec.Decision
+		jobRequest.Status.ReviewName = jobRequestReview.GetName()
+
+		updateErr := r.Status().Update(ctx, jobRequest)
+		if updateErr != nil {
+			r.Log.Error(updateErr, "Failed to update status of JobRequest", "errored_obj", jobRequest)
+		}
+
+		updateReviewErr := r.Status().Update(ctx, jobRequestReview)
+		if updateReviewErr != nil {
+			r.Log.Error(updateReviewErr, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
+		}
+
+		return ctrl.Result{}, nil
+
+	}
+}
+
 func (r *JobRequestReviewReconciler) SetupControllerWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&platformv1.JobRequestReview{}).

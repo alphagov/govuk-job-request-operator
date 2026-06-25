@@ -30,7 +30,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/go-logr/logr"
 )
@@ -39,6 +38,7 @@ type JobRequestReconciler struct {
 	CacheClient     client.Client
 	ApiServerClient client.Reader
 	Scheme          *runtime.Scheme
+	Log             logr.Logger
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
@@ -47,35 +47,33 @@ type JobRequestReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list
 
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-
 	jobRequest := &platformv1.JobRequest{}
 
-	err := r.getJobRequest(ctx, log, req.NamespacedName, jobRequest)
+	err := r.getJobRequest(ctx, req.NamespacedName, jobRequest)
 	if err != nil {
 		return ctrl.Result{}, nil
 	}
 
-	resourceResult, resourceList := r.getTargetResource(ctx, log, jobRequest)
+	resourceResult, resourceList := r.getTargetResource(ctx, jobRequest)
 	if resourceResult != nil {
 		return *resourceResult, nil
 	}
 
-	jobTemplate, err := r.createJobTemplate(ctx, log, &resourceList.Items[0], *jobRequest)
+	jobTemplate, err := r.createJobTemplate(ctx, &resourceList.Items[0], *jobRequest)
 	if err != nil {
 		return ctrl.Result{}, nil
 	}
 
-	return r.handleState(ctx, log, jobRequest, jobTemplate)
+	return r.handleState(ctx, jobRequest, jobTemplate)
 }
 
-func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, log logr.Logger, resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
+func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
 	targetContainer := retrieveContainerFromResource(resource, jobRequest)
 
 	if len(targetContainer) == 0 {
 		err := errors.New("container not found in resource")
-		log.Error(err, "Target container, to create the job from is not found in target resource")
-		r.setState(ctx, log, &jobRequest, "Failed")
+		r.Log.Error(err, "Target container, to create the job from is not found in target resource")
+		r.setState(ctx, &jobRequest, "Failed")
 		return nil, err
 	}
 
@@ -93,25 +91,25 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, log logr.L
 	maps.Copy(job.ObjectMeta.Labels, resource.ObjectMeta.Labels)
 
 	if err := ctrl.SetControllerReference(&jobRequest, &job, r.Scheme); err != nil {
-		log.Error(err, "Failed to create Job Template")
-		r.setState(ctx, log, &jobRequest, "Failed")
+		r.Log.Error(err, "Failed to create Job Template")
+		r.setState(ctx, &jobRequest, "Failed")
 		return &job, err
 	}
 
 	return &job, nil
 }
 
-func (r *JobRequestReconciler) getJobRequest(ctx context.Context, log logr.Logger, namespaceName client.ObjectKey, jobRequest *platformv1.JobRequest) error {
+func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName client.ObjectKey, jobRequest *platformv1.JobRequest) error {
 	err := r.CacheClient.Get(ctx, namespaceName, jobRequest)
 	if apierrors.IsNotFound(err) {
-		log.Error(err, "JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
-		r.setState(ctx, log, jobRequest, "Failed")
+		r.Log.Error(err, "JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
+		r.setState(ctx, jobRequest, "Failed")
 		return err
 	}
 
 	if err != nil {
-		log.Error(err, "Failed to get JobRequest. Suspect the jobrequest is malformed")
-		r.setState(ctx, log, jobRequest, "Malformed")
+		r.Log.Error(err, "Failed to get JobRequest. Suspect the jobrequest is malformed")
+		r.setState(ctx, jobRequest, "Malformed")
 		return err
 	}
 
@@ -132,19 +130,19 @@ func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platf
 	return targetContainer
 }
 
-func (r *JobRequestReconciler) handleState(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest, jobTemplate client.Object) (ctrl.Result, error) {
+func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequest *platformv1.JobRequest, jobTemplate client.Object) (ctrl.Result, error) {
 	switch jobRequest.Status.State {
 	case "":
-		r.setState(ctx, log, jobRequest, "Pending")
+		r.setState(ctx, jobRequest, "Pending")
 		return ctrl.Result{}, nil
 	case "Approved":
 		err := r.CacheClient.Create(ctx, jobTemplate)
 		if err != nil {
-			log.Error(err, "Failed to create Job resource")
-			r.setState(ctx, log, jobRequest, "Failed")
+			r.Log.Error(err, "Failed to create Job resource")
+			r.setState(ctx, jobRequest, "Failed")
 			return ctrl.Result{}, err
 		}
-		r.setState(ctx, log, jobRequest, "Started")
+		r.setState(ctx, jobRequest, "Started")
 		return ctrl.Result{}, nil
 	case "Rejected", "Started", "Completed", "Malformed", "Failed":
 		return ctrl.Result{}, nil
@@ -153,15 +151,15 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, log logr.Logger,
 	}
 }
 
-func (r *JobRequestReconciler) setState(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest, state string) {
+func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platformv1.JobRequest, state string) {
 	jobRequest.Status.State = state
 	err := r.CacheClient.Status().Update(ctx, jobRequest)
 	if err != nil {
-		log.Error(err, "Failed to UPDATE Job resource", "errored_obj", jobRequest)
+		r.Log.Error(err, "Failed to UPDATE Job resource", "errored_obj", jobRequest)
 	}
 }
 
-func (r *JobRequestReconciler) getTargetResource(ctx context.Context, log logr.Logger, jobRequest *platformv1.JobRequest) (*ctrl.Result, *appsv1.DeploymentList) {
+func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest *platformv1.JobRequest) (*ctrl.Result, *appsv1.DeploymentList) {
 	// TODO: this could be another resource like another Job
 	deploymentList := &appsv1.DeploymentList{}
 	opts := []client.ListOption{
@@ -169,8 +167,8 @@ func (r *JobRequestReconciler) getTargetResource(ctx context.Context, log logr.L
 	}
 
 	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
-		log.Error(err, "Failed to list Resources")
-		r.setState(ctx, log, jobRequest, "Failed")
+		r.Log.Error(err, "Failed to list Resources")
+		r.setState(ctx, jobRequest, "Failed")
 		return &ctrl.Result{}, nil
 	}
 
