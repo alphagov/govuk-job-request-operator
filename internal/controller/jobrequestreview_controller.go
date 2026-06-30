@@ -31,9 +31,10 @@ import (
 )
 
 type JobRequestReviewReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
-	Log    logr.Logger
+	CacheClient     client.Client
+	ApiServerClient client.Reader
+	Scheme          *runtime.Scheme
+	Log             logr.Logger
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequestreviews,verbs=get;list;watch;create;update;patch;delete
@@ -53,11 +54,23 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return *resourceResult, nil
 	}
 
+	/*
+
+		JobRequest state is initially nil then requeue again (?)
+		JobRequest state is in pending and JobRequestReview.status.state is nil (decision = approved/rejected) then set JobRequest status.state to approved/rejected
+		JobRequest state is approved/rejected and JobRequestReview state is approved/rejected then just end reconcile (i.e. do nothing)
+
+		JobRequest state is started and Jobrequestreview state is approved/rejected then just end reconcile (i.e. do nothing)
+
+		JobRequest state is malformed(?)
+
+	*/
+
 	return r.handleState(ctx, jobRequest, jobRequestReview)
 }
 
 func (r *JobRequestReviewReconciler) getJobRequestReview(ctx context.Context, namespaceName client.ObjectKey, jobRequestReview *platformv1.JobRequestReview) error {
-	err := r.Get(ctx, namespaceName, jobRequestReview)
+	err := r.CacheClient.Get(ctx, namespaceName, jobRequestReview)
 	if apierrors.IsNotFound(err) {
 		r.Log.Info("JobRequestReview resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
 		return err
@@ -77,9 +90,9 @@ func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobReque
 		client.MatchingFields{"metadata.name": jobRequestReview.Spec.JobRequestName},
 	}
 
-	if err := r.List(ctx, requestList, opts...); err != nil || len(requestList.Items) == 0 {
+	if err := r.ApiServerClient.List(ctx, requestList, opts...); err != nil || len(requestList.Items) == 0 {
 		jobRequestReview.Status.State = "JobRequestNotFound"
-		err := r.Status().Update(ctx, jobRequestReview)
+		err := r.CacheClient.Status().Update(ctx, jobRequestReview)
 		if err != nil {
 			r.Log.Error(err, "Failed to UPDATE JobRequestReview resource", "errored_obj", jobRequestReview)
 		}
@@ -97,12 +110,15 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 		r.Log.Info("JobRequest hasn't finished creating so re-queueing the reconcile")
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
 
+	// This seems to be a problem as well - e.g. we can update to JobRequestMalformed which triggers a reconcile
+	// but then JobRequest changes to Pending and now JobRequestReview hits pending.
+	// What we need is some kind of state transition etc...
 	case "Malformed":
 		err := errors.New("JobRequest body Malformed")
 		r.Log.Error(err, "JobRequest is in a Malformed state so can't approve")
 		jobRequestReview.Status.State = "JobRequestMalformed"
 
-		updateErr := r.Status().Update(ctx, jobRequestReview)
+		updateErr := r.CacheClient.Status().Update(ctx, jobRequestReview)
 		if updateErr != nil {
 			r.Log.Error(err, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
 		}
@@ -113,18 +129,19 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 		jobRequest.Status.State = jobRequestReview.Spec.Decision
 		jobRequest.Status.ReviewName = jobRequestReview.GetName()
 
-		updateErr := r.Status().Update(ctx, jobRequest)
+		updateErr := r.CacheClient.Status().Update(ctx, jobRequest)
 		if updateErr != nil {
 			r.Log.Error(updateErr, "Failed to update status of JobRequest", "errored_obj", jobRequest)
 		}
 
-		updateReviewErr := r.Status().Update(ctx, jobRequestReview)
+		updateReviewErr := r.CacheClient.Status().Update(ctx, jobRequestReview)
 		if updateReviewErr != nil {
 			r.Log.Error(updateReviewErr, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
 		}
 
 		return ctrl.Result{}, nil
 
+	// Possibly tear this out
 	case "Approved", "Rejected", "Started", "Failed", "Completed":
 		err := errors.New("This code path should not be reached. Suspect invalid state passed to the controller")
 		r.Log.Error(err, err.Error())

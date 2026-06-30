@@ -45,6 +45,7 @@ type JobRequestReconciler struct {
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create
 
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequest := &platformv1.JobRequest{}
@@ -130,6 +131,14 @@ func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platf
 	return targetContainer
 }
 
+/*
+Pending - No job created and no jobrequestreview in approved/rejected state - only * this to modify really
+Approved - If own state is in approved then create the job and change status to started
+Rejected - If own state is in rejected then reconcile
+Started - No need for now to check if job exists
+Malformed - If we can't retrieve deployment
+*/
+
 func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequest *platformv1.JobRequest, jobTemplate client.Object) (ctrl.Result, error) {
 	switch jobRequest.Status.State {
 	case "":
@@ -155,7 +164,7 @@ func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platfor
 	jobRequest.Status.State = state
 	err := r.CacheClient.Status().Update(ctx, jobRequest)
 	if err != nil {
-		r.Log.Error(err, "Failed to UPDATE Job resource", "errored_obj", jobRequest)
+		r.Log.Error(err, "Failed to UPDATE JobRequest resource", "errored_obj", jobRequest)
 	}
 }
 

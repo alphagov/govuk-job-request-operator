@@ -43,8 +43,9 @@ var _ = Describe("JobRequestReview Controller", func() {
 
 		It("should successfully reconcile if JobRequestReview doesn't exist", func() {
 			controllerReconciler := &JobRequestReviewReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -73,8 +74,9 @@ var _ = Describe("JobRequestReview Controller", func() {
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 			controllerReconciler := &JobRequestReviewReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -132,8 +134,9 @@ var _ = Describe("JobRequestReview Controller", func() {
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 			controllerReconciler := &JobRequestReviewReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
 			}
 
 			result, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -198,8 +201,9 @@ var _ = Describe("JobRequestReview Controller", func() {
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 			controllerReconciler := &JobRequestReviewReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -264,8 +268,9 @@ var _ = Describe("JobRequestReview Controller", func() {
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 			controllerReconciler := &JobRequestReviewReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
@@ -334,8 +339,9 @@ var _ = Describe("JobRequestReview Controller", func() {
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 			controllerReconciler := &JobRequestReviewReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+				CacheClient:     k8sClient,
+				ApiServerClient: k8sApiReader,
+				Scheme:          k8sClient.Scheme(),
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{

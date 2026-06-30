@@ -12,6 +12,14 @@ rules:
   - get
   - list
 - apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - get
+  - list
+- apiGroups:
   - platform.publishing.service.gov.uk
   resources:
   - jobrequestreviews

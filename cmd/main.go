@@ -189,9 +189,10 @@ func main() {
 	}
 
 	if err := (&controller.JobRequestReviewReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-		Log:    mgr.GetLogger(),
+		CacheClient:     mgr.GetClient(),
+		ApiServerClient: mgr.GetAPIReader(),
+		Scheme:          mgr.GetScheme(),
+		Log:             mgr.GetLogger(),
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequestreview")
 		os.Exit(1)

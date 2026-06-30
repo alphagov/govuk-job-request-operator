@@ -45,12 +45,14 @@ const metricsServiceName = "govuk-job-request-operator-controller-manager-metric
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "govuk-job-request-operator-metrics-binding"
 
+const govukReplatformTestAppDeployment = "deployment.yaml"
+const jobRequest = "jobRequest.yaml"
+const jobRequestReview = "jobRequestReview.yaml"
+
 var _ = Describe("Manager", Ordered, func() {
+	// This isn't being set
 	var controllerPodName string
 
-	// Before running the tests, set up the environment by creating the namespace,
-	// enforce the restricted security policy to the namespace, installing CRDs,
-	// and deploying the controller.
 	BeforeAll(func() {
 		By("creating manager namespace")
 		cmd := exec.Command("kubectl", "create", "ns", namespace)
@@ -74,8 +76,6 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
 	})
 
-	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
-	// and deleting the namespace.
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
@@ -94,8 +94,6 @@ var _ = Describe("Manager", Ordered, func() {
 		_, _ = utils.Run(cmd)
 	})
 
-	// After each test, check for failures and collect logs, events,
-	// and pod descriptions for debugging.
 	AfterEach(func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
@@ -117,6 +115,7 @@ var _ = Describe("Manager", Ordered, func() {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: %s", err)
 			}
 
+			// Probably remove
 			By("Fetching curl-metrics logs")
 			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
 			metricsOutput, err := utils.Run(cmd)
@@ -270,17 +269,108 @@ var _ = Describe("Manager", Ordered, func() {
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput, err := getMetricsOutput()
-		// Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+	})
+
+	Context("JobRequest", func() {
+		It("should successfully create a job", func() {
+			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
+
+			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd := exec.Command("kubectl", "apply", "-f", deploymentFixture, "-n", namespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
+
+			By("waiting for the govuk-replatform-test-app deployment to become available.")
+			//TODO: Use conditions rather than .availableReplicas
+			verifyDeploymentUp := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployments", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.availableReplicas}",
+					"-n", namespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("1"), "curl pod in wrong status")
+			}
+			Eventually(verifyDeploymentUp, 5*time.Minute).Should(Succeed())
+
+			By("creating a JobRequest")
+			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequest)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd = exec.Command("kubectl", "apply", "-f", jobRequestFixture, "-n", namespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+
+			verifyJobRequestUp := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.state}",
+					"-n", namespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
+			}
+			Eventually(verifyJobRequestUp, 5*time.Minute).Should(Succeed())
+
+			By("creating a JobRequestReview to approve the JobRequest")
+			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReview)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd = exec.Command("kubectl", "apply", "-f", jobRequestReviewFixture, "-n", namespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
+
+			verifyJobRequestReviewUp := func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.state}",
+					"-n", namespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
+			}
+			Eventually(verifyJobRequestReviewUp, 5*time.Minute).Should(Succeed())
+
+			By("JobRequest is in Started state")
+			verifyJobRequestStarted := func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.state}",
+					"-n", namespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Started"), "JobRequest in wrong status")
+			}
+
+			Eventually(verifyJobRequestStarted, 5*time.Minute).Should(Succeed())
+
+			By("Job performs rake task")
+			verifyJobCompleted := func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "jobs", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.succeeded}",
+					"-n", namespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("1"), "Job not succeeded")
+			}
+
+			Eventually(verifyJobCompleted, 5*time.Minute).Should(Succeed())
+
+			verifyJobOutput := func(g Gomega) {
+				cmd = exec.Command("kubectl", "logs", "jobs/govuk-replatform-test-app", "-n", namespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("Hello World!"))
+			}
+
+			Eventually(verifyJobOutput, 5*time.Minute).Should(Succeed())
+		})
 	})
 })
+
+//TODO: Clean up code - delete deployment, jobRequest, job, JobRequestReview
+//TODO: Write up rejected E2E test
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request
