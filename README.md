@@ -23,6 +23,8 @@ apiVersion: platform.publishing.service.gov.uk/v1
 kind: JobRequest
 metadata:
   name: something
+  annotations:
+    platform.publishing.service.gov.uk/requested-by: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
 spec:
   containerFrom:
     podSpecFrom:
@@ -34,7 +36,6 @@ spec:
   args: [ "some:task", "some-arg" ]
 status:
   jobName: jr-something
-  requestedBy: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
   reviewName: something-approval
   state: Started
 ```
@@ -49,12 +50,14 @@ apiVersion: platform.publishing.service.gov.uk/v1
 kind: JobRequestReview
 metadata:
   name: something-approval
+  annotations:
+    platform.publishing.service.gov.uk/reviewed-by: arn:aws:sts::123456789:assumed-role/otheruser.name-platformengineer/environment-platformengineer
 spec:
   jobRequestName: something
   decision: Approved
   description: "LGTM"
 status:
-  reviewedBy: arn:aws:sts::123456789:assumed-role/otheruser.name-platformengineer/environment-platformengineer
+  state: Approved
 ```
 
 ### Create and generate the manifests

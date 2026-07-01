@@ -20,11 +20,8 @@ spec:
     - jsonPath: .spec.jobRequestName
       name: Job Request
       type: string
-    - jsonPath: .spec.decision
-      name: Decision
-      type: string
-    - jsonPath: .status.reviewedBy
-      name: Reviewed By
+    - jsonPath: .status.state
+      name: State
       type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
@@ -59,6 +56,7 @@ spec:
                 enum:
                 - Approved
                 - Rejected
+                - Pending
                 type: string
               description:
                 description: A description of the review decision.
@@ -73,8 +71,12 @@ spec:
           status:
             description: status defines the observed state of JobRequestReview
             properties:
-              reviewedBy:
-                description: Kubernetes username of the reviewer.
+              state:
+                enum:
+                - Approved
+                - Rejected
+                - JobRequestMalformed
+                - JobRequestNotFound
                 type: string
             type: object
         required:

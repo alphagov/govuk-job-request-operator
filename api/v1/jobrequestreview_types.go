@@ -24,7 +24,7 @@ import (
 type JobRequestReviewSpec struct {
 	// Name of the JobRequest resource being reviewed.
 	JobRequestName string `json:"jobRequestName"`
-	// +kubebuilder:validation:Enum=Approved;Rejected
+	// +kubebuilder:validation:Enum=Approved;Rejected;Pending
 	Decision string `json:"decision"`
 	// A description of the review decision.
 	// +optional
@@ -33,16 +33,15 @@ type JobRequestReviewSpec struct {
 
 // JobRequestReviewStatus defines the observed state of JobRequestReview.
 type JobRequestReviewStatus struct {
-	// Kubernetes username of the reviewer.
-	ReviewedBy string `json:"reviewedBy,omitempty"`
+	// +kubebuilder:validation:Enum=Approved;Rejected;JobRequestMalformed;JobRequestNotFound
+	State string `json:"state,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:shortName=jrr
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Job Request",type=string,JSONPath=`.spec.jobRequestName`
-// +kubebuilder:printcolumn:name="Decision",type=string,JSONPath=`.spec.decision`
-// +kubebuilder:printcolumn:name="Reviewed By",type=string,JSONPath=`.status.reviewedBy`
+// +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // JobRequestReview represents a decision to run a requested job in the cluster
