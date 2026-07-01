@@ -33,8 +33,11 @@ import (
 	"github.com/alphagov/govuk-job-request-operator/test/utils"
 )
 
-// namespace where the project is deployed in
+// namespace where the operator is deployed in
 const namespace = "govuk-job-request-operator-system"
+
+// app namespace where resources are deployed in
+const appNamespace = "apps"
 
 // serviceAccountName created for the project
 const serviceAccountName = "govuk-job-request-operator-controller-manager"
@@ -48,9 +51,9 @@ const metricsRoleBindingName = "govuk-job-request-operator-metrics-binding"
 const govukReplatformTestAppDeployment = "deployment.yaml"
 const jobRequest = "jobRequest.yaml"
 const jobRequestReview = "jobRequestReview.yaml"
+const jobRequestReviewRejected = "jobRequestReviewRejected.yaml"
 
 var _ = Describe("Manager", Ordered, func() {
-	// This isn't being set
 	var controllerPodName string
 
 	BeforeAll(func() {
@@ -74,11 +77,26 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", managerImage))
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+		By("creating apps namespace")
+		cmd = exec.Command("kubectl", "create", "ns", appNamespace)
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create apps namespace")
+
+		By("labeling the apps namespace to enforce the restricted security policy")
+		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", appNamespace,
+			"pod-security.kubernetes.io/enforce=restricted")
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to label apps namespace with restricted policy")
 	})
 
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
+		_, _ = utils.Run(cmd)
+
+		By("removing apps namespace")
+		cmd = exec.Command("kubectl", "delete", "ns", appNamespace)
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
@@ -91,6 +109,20 @@ var _ = Describe("Manager", Ordered, func() {
 
 		By("removing manager namespace")
 		cmd = exec.Command("kubectl", "delete", "ns", namespace)
+		_, _ = utils.Run(cmd)
+	})
+
+	BeforeEach(func() {
+		By("cleaning up the JobReview")
+		cmd := exec.Command("kubectl", "delete", "jrr", "--all", "-n", appNamespace)
+		_, _ = utils.Run(cmd)
+
+		By("cleaning up the JobRequest")
+		cmd = exec.Command("kubectl", "delete", "jr", "--all", "-n", appNamespace)
+		_, _ = utils.Run(cmd)
+
+		By("cleaning up the Deployment")
+		cmd = exec.Command("kubectl", "delete", "deployment", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
 	})
 
@@ -115,7 +147,6 @@ var _ = Describe("Manager", Ordered, func() {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to get Kubernetes events: %s", err)
 			}
 
-			// Probably remove
 			By("Fetching curl-metrics logs")
 			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
 			metricsOutput, err := utils.Run(cmd)
@@ -267,31 +298,24 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyMetricsAvailable, 2*time.Minute).Should(Succeed())
 		})
 
-		// +kubebuilder:scaffold:e2e-webhooks-checks
-
-	})
-
-	Context("JobRequest", func() {
 		It("should successfully create a job", func() {
 			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
 
 			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
 
-			cmd := exec.Command("kubectl", "apply", "-f", deploymentFixture, "-n", namespace)
+			cmd := exec.Command("kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
 
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
 
 			By("waiting for the govuk-replatform-test-app deployment to become available.")
-			//TODO: Use conditions rather than .availableReplicas
 			verifyDeploymentUp := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "deployments", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.availableReplicas}",
-					"-n", namespace)
+					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("1"), "curl pod in wrong status")
+				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
 			}
 			Eventually(verifyDeploymentUp, 5*time.Minute).Should(Succeed())
 
@@ -299,7 +323,7 @@ var _ = Describe("Manager", Ordered, func() {
 			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequest)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd = exec.Command("kubectl", "apply", "-f", jobRequestFixture, "-n", namespace)
+			cmd = exec.Command("kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace)
 
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
@@ -307,7 +331,7 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyJobRequestUp := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
-					"-n", namespace)
+					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
@@ -318,7 +342,7 @@ var _ = Describe("Manager", Ordered, func() {
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReview)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd = exec.Command("kubectl", "apply", "-f", jobRequestReviewFixture, "-n", namespace)
+			cmd = exec.Command("kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace)
 
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
@@ -326,7 +350,7 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyJobRequestReviewUp := func(g Gomega) {
 				cmd = exec.Command("kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
-					"-n", namespace)
+					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
@@ -337,7 +361,7 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyJobRequestStarted := func(g Gomega) {
 				cmd = exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
-					"-n", namespace)
+					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Started"), "JobRequest in wrong status")
@@ -349,7 +373,7 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyJobCompleted := func(g Gomega) {
 				cmd = exec.Command("kubectl", "get", "jobs", "govuk-replatform-test-app",
 					"-o", "jsonpath={.status.succeeded}",
-					"-n", namespace)
+					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("1"), "Job not succeeded")
@@ -358,7 +382,7 @@ var _ = Describe("Manager", Ordered, func() {
 			Eventually(verifyJobCompleted, 5*time.Minute).Should(Succeed())
 
 			verifyJobOutput := func(g Gomega) {
-				cmd = exec.Command("kubectl", "logs", "jobs/govuk-replatform-test-app", "-n", namespace)
+				cmd = exec.Command("kubectl", "logs", "jobs/govuk-replatform-test-app", "-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("Hello World!"))
@@ -366,11 +390,94 @@ var _ = Describe("Manager", Ordered, func() {
 
 			Eventually(verifyJobOutput, 5*time.Minute).Should(Succeed())
 		})
+
+		It("should not create a job when JobRequest is rejected", func() {
+			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
+
+			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
+
+			cmd := exec.Command("kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
+
+			By("waiting for the govuk-replatform-test-app deployment to become available.")
+			//TODO: Use conditions rather than .availableReplicas
+			verifyDeploymentUp := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployments", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.availableReplicas}",
+					"-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("1"), "curl pod in wrong status")
+			}
+			Eventually(verifyDeploymentUp, 5*time.Minute).Should(Succeed())
+
+			By("creating a JobRequest")
+			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequest)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd = exec.Command("kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+
+			verifyJobRequestUp := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.state}",
+					"-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
+			}
+			Eventually(verifyJobRequestUp, 5*time.Minute).Should(Succeed())
+
+			By("creating a JobRequestReview to reject the JobRequest")
+			jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejected)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd = exec.Command("kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
+
+			verifyJobRequestReviewUp := func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.state}",
+					"-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Rejected"), "JobRequestReview in wrong status")
+			}
+			Eventually(verifyJobRequestReviewUp, 5*time.Minute).Should(Succeed())
+
+			By("JobRequest is in Rejected state")
+			verifyJobRequestStarted := func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.state}",
+					"-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("Rejected"), "JobRequest in wrong status")
+			}
+
+			Eventually(verifyJobRequestStarted, 5*time.Minute).Should(Succeed())
+
+			By("Job not created")
+			verifyJobNotStarted := func(g Gomega) {
+				cmd = exec.Command("kubectl", "get", "jobs", "govuk-replatform-test-app", "-n", appNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+
+			Eventually(verifyJobNotStarted, 5*time.Minute).Should(Succeed())
+		})
+
+		// +kubebuilder:scaffold:e2e-webhooks-checks
+
 	})
 })
-
-//TODO: Clean up code - delete deployment, jobRequest, job, JobRequestReview
-//TODO: Write up rejected E2E test
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request

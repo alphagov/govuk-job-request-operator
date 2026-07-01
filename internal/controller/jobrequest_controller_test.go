@@ -40,6 +40,9 @@ func jobRequestBuilder(jobRequestName, resourceName, resourceNamespace, containe
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobRequestName,
 			Namespace: resourceNamespace,
+			Annotations: map[string]string{
+				"platform.publishing.service.gov.uk/requested-by": "arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer",
+			},
 		},
 		Spec: platformv1.JobRequestSpec{
 			ContainerFrom: platformv1.JobRequestContainerFrom{
@@ -52,6 +55,23 @@ func jobRequestBuilder(jobRequestName, resourceName, resourceNamespace, containe
 			},
 			Command: "echo",
 			Args:    []string{"Hello, World!"},
+		},
+	}
+}
+
+func jobRequestReviewBuilder(jobRequestName, jobRequestReviewName string) *platformv1.JobRequestReview {
+	return &platformv1.JobRequestReview{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      jobRequestReviewName,
+			Namespace: "default",
+			Annotations: map[string]string{
+				"platform.publishing.service.gov.uk/requested-by": "arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer",
+			},
+		},
+		Spec: platformv1.JobRequestReviewSpec{
+			JobRequestName: jobRequestName,
+			Decision:       "Approved",
+			Description:    "A description",
 		},
 	}
 }
@@ -125,6 +145,7 @@ var _ = Describe("JobRequest Controller", func() {
 		resourceName := "sample"
 		resourceNamespace := "default"
 		containerName := "foo-container"
+		jobRequestReviewName := "review"
 
 		ctx := context.Background()
 
@@ -142,9 +163,11 @@ var _ = Describe("JobRequest Controller", func() {
 
 			jobRequest := jobRequestBuilder(resourceName, resourceName, resourceNamespace, containerName)
 			targetResource := deploymentBuilder(resourceName, resourceNamespace)
+			jobRequestReview := jobRequestReviewBuilder(resourceName, jobRequestReviewName)
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 			jobRequest.Status = jobRequestStatus
 			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
 
@@ -202,6 +225,7 @@ var _ = Describe("JobRequest Controller", func() {
 			By("Cleanup the JobRequest, Deployment and Job")
 			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, jobRequestReview)).To(Succeed())
 
 			var foreground metav1.DeletionPropagation = "Background"
 			var noGrace int64 = 0

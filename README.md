@@ -23,11 +23,7 @@ kind: JobRequest
 metadata:
   name: something
   annotations:
-<<<<<<< HEAD
     platform.publishing.service.gov.uk/requested-by: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
-=======
-    requestedBy: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
->>>>>>> 1cd9f18 (chore: 🤖 remove "requested" -> "Pending" and mv reuestedBy pls)
 spec:
   containerFrom:
     podSpecFrom:

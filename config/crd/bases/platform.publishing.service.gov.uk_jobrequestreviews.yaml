@@ -82,6 +82,8 @@ spec:
         required:
         - spec
         type: object
+    selectableFields:
+    - jsonPath: .spec.jobRequestName
     served: true
     storage: true
     subresources:

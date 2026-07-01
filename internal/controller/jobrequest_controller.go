@@ -65,7 +65,9 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	return r.handleState(ctx, jobRequest, jobTemplate)
+	jobRequestState := r.calculateState(ctx, jobRequest)
+
+	return r.handleState(ctx, jobRequestState, jobRequest, jobTemplate)
 }
 
 func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *appsv1.Deployment, jobRequest platformv1.JobRequest) (*batch.Job, error) {
@@ -131,17 +133,28 @@ func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platf
 	return targetContainer
 }
 
-/*
-Pending - No job created and no jobrequestreview in approved/rejected state - only * this to modify really
-Approved - If own state is in approved then create the job and change status to started
-Rejected - If own state is in rejected then reconcile
-Started - No need for now to check if job exists
-Malformed - If we can't retrieve deployment
-*/
+func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *platformv1.JobRequest) string {
+	jobRequestReviewList := &platformv1.JobRequestReviewList{}
+	opts := []client.ListOption{
+		client.MatchingFields{"spec.jobRequestName": jobRequest.GetObjectMeta().GetName()},
+	}
 
-func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequest *platformv1.JobRequest, jobTemplate client.Object) (ctrl.Result, error) {
-	switch jobRequest.Status.State {
-	case "":
+	if err := r.ApiServerClient.List(ctx, jobRequestReviewList, opts...); err != nil {
+		r.Log.Error(err, "Failed to list JobRequestReview")
+		return "Pending"
+	}
+
+	if len(jobRequestReviewList.Items) == 0 {
+		r.Log.Info("No JobRequestReview has been found")
+		return "Pending"
+	}
+
+	return jobRequest.Status.State
+}
+
+func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState string, jobRequest *platformv1.JobRequest, jobTemplate client.Object) (ctrl.Result, error) {
+	switch jobRequestState {
+	case "Pending":
 		r.setState(ctx, jobRequest, "Pending")
 		return ctrl.Result{}, nil
 	case "Approved":
@@ -153,7 +166,10 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequest *plat
 		}
 		r.setState(ctx, jobRequest, "Started")
 		return ctrl.Result{}, nil
-	case "Rejected", "Started", "Completed", "Malformed", "Failed":
+	case "Failed":
+		r.setState(ctx, jobRequest, "Failed")
+		return ctrl.Result{}, nil
+	case "Rejected", "Started", "Completed", "Malformed":
 		return ctrl.Result{}, nil
 	default:
 		return ctrl.Result{}, nil
@@ -169,7 +185,6 @@ func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platfor
 }
 
 func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest *platformv1.JobRequest) (*ctrl.Result, *appsv1.DeploymentList) {
-	// TODO: this could be another resource like another Job
 	deploymentList := &appsv1.DeploymentList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"metadata.name": jobRequest.Spec.ContainerFrom.PodSpecFrom.Name},

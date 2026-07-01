@@ -40,9 +40,6 @@ var (
 	govukReplatformTestAppImage = "ghcr.io/alphagov/govuk/govuk-replatform-test-app:v47"
 )
 
-// TestE2E runs the e2e test suite to validate the solution in an isolated environment.
-// The default setup requires Kind and CertManager.
-//
 // To skip CertManager installation, set: CERT_MANAGER_INSTALL_SKIP=true
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)

@@ -43,6 +43,7 @@ type JobRequestReviewStatus struct {
 // +kubebuilder:printcolumn:name="Job Request",type=string,JSONPath=`.spec.jobRequestName`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:selectablefield:JSONPath=".spec.jobRequestName"
 
 // JobRequestReview represents a decision to run a requested job in the cluster
 type JobRequestReview struct {

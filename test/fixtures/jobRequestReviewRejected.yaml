@@ -1,0 +1,10 @@
+apiVersion: platform.publishing.service.gov.uk/v1
+kind: JobRequestReview
+metadata:
+  name: govuk-replatform-test-app
+  annotations:
+    platform.publishing.service.gov.uk/reviewed-by: arn:aws:sts::123456789:assumed-role/otheruser.name-platformengineer/environment-platformengineer
+spec:
+  jobRequestName: govuk-replatform-test-app
+  decision: Rejected
+  description: "Not suitable to run"
