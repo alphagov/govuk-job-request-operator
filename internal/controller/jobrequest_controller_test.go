@@ -475,6 +475,9 @@ var _ = Describe("JobRequest Controller", func() {
 			jobRequest := jobRequestBuilder(resourceName, resourceName, resourceNamespace, containerName)
 
 			targetResource := deploymentBuilder(resourceName, resourceNamespace)
+			jobRequestReview := jobRequestReviewBuilder(resourceName, jobRequestReviewName)
+
+			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
@@ -513,6 +516,7 @@ var _ = Describe("JobRequest Controller", func() {
 			By("Cleanup the JobRequest, Deployment and Job")
 			Expect(k8sClient.Delete(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, jobRequest)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, jobRequestReview)).To(Succeed())
 		})
 	})
 })

@@ -55,6 +55,8 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
+	// TODO: consider bailing out early based on the state eg. Failed (no need to lookup deployments and review etc.)
+
 	resourceResult, resourceList := r.getTargetResource(ctx, jobRequest)
 	if resourceResult != nil {
 		return *resourceResult, nil
