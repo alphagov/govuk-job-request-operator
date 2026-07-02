@@ -49,22 +49,14 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
+	if jobRequestReview.Status.State != "" {
+		return ctrl.Result{}, nil
+	}
+
 	resourceResult, jobRequest := r.getJobRequest(ctx, jobRequestReview)
 	if resourceResult != nil {
 		return *resourceResult, nil
 	}
-
-	/*
-
-		JobRequest state is initially nil then requeue again (?)
-		JobRequest state is in pending and JobRequestReview.status.state is nil (decision = approved/rejected) then set JobRequest status.state to approved/rejected
-		JobRequest state is approved/rejected and JobRequestReview state is approved/rejected then just end reconcile (i.e. do nothing)
-
-		JobRequest state is started and Jobrequestreview state is approved/rejected then just end reconcile (i.e. do nothing)
-
-		JobRequest state is malformed(?)
-
-	*/
 
 	return r.handleState(ctx, jobRequest, jobRequestReview)
 }
@@ -104,35 +96,35 @@ func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobReque
 	return nil, &requestList.Items[0]
 }
 
+func (r *JobRequestReviewReconciler) handleReviewDecision(ctx context.Context, jobRequest *platformv1.JobRequest, jobRequestReview *platformv1.JobRequestReview) (ctrl.Result, error) {
+	jobRequest.Status.State = jobRequestReview.Spec.Decision
+	updateErr := r.CacheClient.Status().Update(ctx, jobRequest)
+	if updateErr != nil {
+		r.Log.Error(updateErr, "Failed to update status of JobRequest", "errored_obj", jobRequest)
+	}
+
+	if jobRequestReview.Status.State == "" {
+		jobRequestReview.Status.State = jobRequestReview.Spec.Decision
+		updateReviewErr := r.CacheClient.Status().Update(ctx, jobRequestReview)
+		if updateReviewErr != nil {
+			r.Log.Error(updateReviewErr, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
+		}
+	}
+
+	return ctrl.Result{}, nil
+}
+
 func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest *platformv1.JobRequest, jobRequestReview *platformv1.JobRequestReview) (ctrl.Result, error) {
 	switch jobRequest.Status.State {
 	case "":
 		r.Log.Info("JobRequest hasn't finished creating so re-queueing the reconcile")
 		return ctrl.Result{RequeueAfter: time.Minute}, nil
 
-	// This seems to be a problem as well - e.g. we can update to JobRequestMalformed which triggers a reconcile
-	// but then JobRequest changes to Pending and now JobRequestReview hits pending.
-	// What we need is some kind of state transition etc...
 	case "Malformed":
 		err := errors.New("JobRequest body Malformed")
 		r.Log.Error(err, "JobRequest is in a Malformed state so can't approve")
+
 		jobRequestReview.Status.State = "JobRequestMalformed"
-
-		updateErr := r.CacheClient.Status().Update(ctx, jobRequestReview)
-		if updateErr != nil {
-			r.Log.Error(err, "Failed to update status of JobRequestReview", "errored_obj", jobRequestReview)
-		}
-		return ctrl.Result{}, nil
-
-	case "Pending":
-		jobRequestReview.Status.State = jobRequestReview.Spec.Decision
-		jobRequest.Status.State = jobRequestReview.Spec.Decision
-		jobRequest.Status.ReviewName = jobRequestReview.GetName()
-
-		updateErr := r.CacheClient.Status().Update(ctx, jobRequest)
-		if updateErr != nil {
-			r.Log.Error(updateErr, "Failed to update status of JobRequest", "errored_obj", jobRequest)
-		}
 
 		updateReviewErr := r.CacheClient.Status().Update(ctx, jobRequestReview)
 		if updateReviewErr != nil {
@@ -141,10 +133,13 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 
 		return ctrl.Result{}, nil
 
-	// Possibly tear this out
+	case "Pending":
+		jobRequest.Status.State = jobRequestReview.Spec.Decision
+		jobRequest.Status.ReviewName = jobRequestReview.GetName()
+
+		return r.handleReviewDecision(ctx, jobRequest, jobRequestReview)
+
 	case "Approved", "Rejected", "Started", "Failed", "Completed":
-		err := errors.New("This code path should not be reached. Suspect invalid state passed to the controller")
-		r.Log.Error(err, err.Error())
 		return ctrl.Result{}, nil
 
 	default:

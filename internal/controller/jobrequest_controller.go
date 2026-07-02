@@ -147,7 +147,7 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 	}
 
 	if len(jobRequestReviewList.Items) == 0 {
-		r.Log.Info("No JobRequestReview has been found")
+		r.Log.Info("No JobRequestReview has found yet...")
 		return "Pending"
 	}
 
