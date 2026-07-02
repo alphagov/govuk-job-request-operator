@@ -56,7 +56,6 @@ spec:
                 enum:
                 - Approved
                 - Rejected
-                - Pending
                 type: string
               description:
                 description: A description of the review decision.
@@ -82,6 +81,8 @@ spec:
         required:
         - spec
         type: object
+    selectableFields:
+    - jsonPath: .spec.jobRequestName
     served: true
     storage: true
     subresources:

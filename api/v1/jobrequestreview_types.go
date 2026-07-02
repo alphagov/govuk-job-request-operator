@@ -24,7 +24,7 @@ import (
 type JobRequestReviewSpec struct {
 	// Name of the JobRequest resource being reviewed.
 	JobRequestName string `json:"jobRequestName"`
-	// +kubebuilder:validation:Enum=Approved;Rejected;Pending
+	// +kubebuilder:validation:Enum=Approved;Rejected
 	Decision string `json:"decision"`
 	// A description of the review decision.
 	// +optional
@@ -43,6 +43,7 @@ type JobRequestReviewStatus struct {
 // +kubebuilder:printcolumn:name="Job Request",type=string,JSONPath=`.spec.jobRequestName`
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:selectablefield:JSONPath=".spec.jobRequestName"
 
 // JobRequestReview represents a decision to run a requested job in the cluster
 type JobRequestReview struct {
