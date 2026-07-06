@@ -9,3 +9,9 @@
 /samples
 
 cover.out
+coverage/integration
+coverage/unit
+coverage/version
+coverage/report
+coverage/report-main
+coverage/merged
