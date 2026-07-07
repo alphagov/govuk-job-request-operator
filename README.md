@@ -13,7 +13,6 @@ brew install k3d
 ```
 
 ### Custom Resource Definitions (CRDs)
-
 #### JobRequest
 
 A `JobRequest` represents a request to run a command/job.
@@ -126,6 +125,30 @@ make deploy
 kubebuilder edit --plugins=helm/v2-alpha
 ```
 
+### Run the integration tests
+
+```
+make test
+```
+
+### Run the end-to-end tests
+
+End to end tests use `kind` to spin up a local cluster.
+
+1. Install `kind`:
+
+```
+brew install kind
+```
+
+2. Run the end-to-end tests
+
+See https://github.com/kubernetes-sigs/kind/issues/3795 to turn off containerd image store
+
+```
+make test-e2e
+```
+
 ## Release a new version
 
 This project uses [Semantic Versioning](https://semver.org/).
@@ -159,3 +182,5 @@ board](https://github.com/orgs/alphagov/projects/71).
 [MIT License](LICENCE)
 
 [#govuk-platform-engineering]: https://gds.slack.com/channels/govuk-platform-engineering
+
+

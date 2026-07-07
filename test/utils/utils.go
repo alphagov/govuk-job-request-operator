@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
@@ -59,6 +60,18 @@ func Run(cmd *exec.Cmd) (string, error) {
 	}
 
 	return string(output), nil
+}
+
+func RetrieveFixtureFilePath(fixture string) (string, error) {
+	dir, err := GetProjectDir()
+
+	if err != nil {
+		return dir, fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	const fixturesBasePath = "test/fixtures/"
+
+	return filepath.Join(dir, fixturesBasePath, fixture), nil
 }
 
 // UninstallCertManager uninstalls the cert manager
