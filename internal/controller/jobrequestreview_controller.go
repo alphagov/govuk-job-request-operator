@@ -116,7 +116,7 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 	switch jobRequest.Status.State {
 	case "":
 		r.Log.Info("JobRequest hasn't finished creating so re-queueing the reconcile")
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
+		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 
 	case "Malformed":
 		err := errors.New("JobRequest body Malformed")

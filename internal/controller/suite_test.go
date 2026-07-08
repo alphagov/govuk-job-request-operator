@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,16 +36,10 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
-
 var (
-	ctx          context.Context
-	cancel       context.CancelFunc
-	testEnv      *envtest.Environment
-	cfg          *rest.Config
-	k8sClient    client.Client
-	k8sApiReader client.Reader
+	testEnv   *envtest.Environment
+	cfg       *rest.Config
+	k8sClient client.Client
 )
 
 func TestControllers(t *testing.T) {
@@ -57,8 +50,6 @@ func TestControllers(t *testing.T) {
 
 var _ = BeforeSuite(func() {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
-
-	ctx, cancel = context.WithCancel(context.TODO())
 
 	var err error
 	err = platformv1.AddToScheme(scheme.Scheme)
@@ -85,15 +76,10 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
-
-	k8sApiReader, err = client.New(cfg, client.Options{Scheme: scheme.Scheme, Cache: nil})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sApiReader).NotTo(BeNil())
 })
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
-	cancel()
 	Eventually(func() error {
 		return testEnv.Stop()
 	}, time.Minute, time.Second).Should(Succeed())
