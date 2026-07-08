@@ -20,6 +20,13 @@ rules:
   - get
   - list
 - apiGroups:
+  - events.k8s.io
+  resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
   - platform.publishing.service.gov.uk
   resources:
   - jobrequestreviews

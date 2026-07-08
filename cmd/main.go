@@ -21,10 +21,6 @@ import (
 	"flag"
 	"os"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -182,6 +178,7 @@ func main() {
 		CacheClient:     mgr.GetClient(),
 		ApiServerClient: mgr.GetAPIReader(),
 		Scheme:          mgr.GetScheme(),
+		Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 		Log:             mgr.GetLogger(),
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
@@ -192,6 +189,7 @@ func main() {
 		CacheClient:     mgr.GetClient(),
 		ApiServerClient: mgr.GetAPIReader(),
 		Scheme:          mgr.GetScheme(),
+		Recorder:        mgr.GetEventRecorder("jobrequestreview-controller"),
 		Log:             mgr.GetLogger(),
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequestreview")

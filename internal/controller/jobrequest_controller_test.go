@@ -31,6 +31,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -47,6 +48,12 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 		containerName := "foo"
 		jobRequestName := "request"
 		jobRequestReviewName := "review"
+		jobOpts := []client.ListOption{
+			client.MatchingFields{"metadata.name": deploymentName},
+		}
+		eventOpts := []client.ListOption{
+			client.MatchingFields{"reportingController": "jobrequest-controller"},
+		}
 
 		jobRequestNamespaceName := types.NamespacedName{
 			Name:      jobRequestName,
@@ -72,6 +79,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				CacheClient:     mgr.GetClient(),
 				ApiServerClient: mgr.GetAPIReader(),
 				Scheme:          mgr.GetScheme(),
+				Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 			}).SetupControllerWithManager(mgr)
 
 			go func() {
@@ -92,18 +100,27 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 		})
 
 		AfterEach(func() {
-			By("tearing down the test resources")
-			By("cleaning up the JobReview")
 			var background metav1.DeletionPropagation = "Background"
 			var graceSecs int64 = 0
 			opts := &client.DeleteAllOfOptions{}
 			opts.Namespace = appNamespaceName
 			opts.GracePeriodSeconds = &graceSecs
 			opts.PropagationPolicy = &background
+
+			By("tearing down the JobRequests")
 			Expect(k8sClient.DeleteAllOf(ctx, &platformv1.JobRequest{}, opts)).To(Succeed())
+
+			By("tearing down the JobRequestReviews")
 			Expect(k8sClient.DeleteAllOf(ctx, &platformv1.JobRequestReview{}, opts)).To(Succeed())
+
+			By("tearing down the Deployments")
 			Expect(k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, opts)).To(Succeed())
+
+			By("tearing down the Jobs")
 			Expect(k8sClient.DeleteAllOf(ctx, &batch.Job{}, opts)).To(Succeed())
+
+			By("tearing down the Events")
+			Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, opts)).To(Succeed())
 		})
 
 		It("should successfully reconcile when JobRequest is 'Approved' and the job created", func() {
@@ -119,9 +136,14 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
+			eventList := &eventsv1.EventList{}
+
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(jobRequest.Status.State).To(Equal("Pending"))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
 			}).Should(Succeed())
 
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
@@ -130,17 +152,18 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(jobRequest.Status.State).To(Equal("Started"))
 				g.Expect(jobRequest.Status.JobName).To(Equal(deploymentName))
+				g.Expect(eventList.Items).To(HaveLen(3))
+				g.Expect(eventList.Items[1].Reason).To(Equal("Approved"))
+				g.Expect(eventList.Items[2].Reason).To(Equal("Started"))
 			}).Should(Succeed())
 
 			jobList := &batch.JobList{}
-			opts := []client.ListOption{
-				client.MatchingFields{"metadata.name": deploymentName},
-			}
 
 			Eventually(func(g Gomega) {
-				g.Expect(k8sClient.List(ctx, jobList, opts...)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 				g.Expect(jobList.Items).To(HaveLen(1))
 				g.Expect(jobList.Items[0].GetName()).To(Equal(deploymentName))
 				g.Expect(jobList.Items[0].GetNamespace()).To(Equal(appNamespaceName))
@@ -164,16 +187,20 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(jobRequestName))
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Kind).To(Equal("JobRequest"))
 			}).Should(Succeed())
-
 		})
 
 		It("should successfully reconcile if we cannot retrieve the target resource in the JobRequest from the cluster and the job should not be created", func() {
 			jobRequest := jobRequestBuilder(jobRequestName, "example-app", appNamespaceName, "example-container")
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
+			eventList := &eventsv1.EventList{}
+
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(jobRequest.Status.State).To(Equal("Failed"))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Failed"))
 			}).Should(Succeed())
 		})
 
@@ -184,9 +211,14 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
+			eventList := &eventsv1.EventList{}
+
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(jobRequest.Status.State).To(Equal("Failed"))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Failed"))
 			}).Should(Succeed())
 		})
 
@@ -198,19 +230,21 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
 			jobList := &batch.JobList{}
-			opts := []client.ListOption{
-				client.MatchingFields{"metadata.name": deploymentName},
-			}
-			Expect(k8sClient.List(ctx, jobList, opts...)).To(Succeed())
+			Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 			Expect(jobList.Items).To(BeEmpty())
+
+			eventList := &eventsv1.EventList{}
 
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(jobRequest.Status.State).To(Equal("Pending"))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
 			}).Should(Succeed())
 		})
 
-		It("should successfully reconcile with no job created when the JobRequest status is 'Rejected'", func() {
+		It("should successfully reconcile when JobRequest is 'Rejected' and the job should not be created", func() {
 			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
 			targetResource := deploymentBuilder(deploymentName, appNamespaceName)
 			jobRequestReview := jobRequestReviewBuilder(jobRequestName, appNamespaceName, jobRequestReviewName, "Rejected")
@@ -222,20 +256,31 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+			eventList := &eventsv1.EventList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal("Pending"))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
+			}).Should(Succeed())
+
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 			jobRequest.Status = jobRequestStatus
 			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
 
 			jobList := &batch.JobList{}
-			opts := []client.ListOption{
-				client.MatchingFields{"metadata.name": deploymentName},
-			}
-			Expect(k8sClient.List(ctx, jobList, opts...)).To(Succeed())
+			Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 			Expect(jobList.Items).To(BeEmpty())
 
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(jobRequest.Status.State).To(Equal("Rejected"))
+				g.Expect(eventList.Items).To(HaveLen(2))
+				g.Expect(eventList.Items[1].Reason).To(Equal("Rejected"))
 			}).Should(Succeed())
 		})
 
@@ -256,11 +301,8 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 			jobList := &batch.JobList{}
-			opts := []client.ListOption{
-				client.MatchingFields{"metadata.name": deploymentName},
-			}
 
-			Expect(k8sClient.List(ctx, jobList, opts...)).To(Succeed())
+			Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 			Expect(jobList.Items).To(BeEmpty())
 
 			Eventually(func(g Gomega) {
