@@ -190,7 +190,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			jobRequestStatus := platformv1.JobRequestStatus{
 				JobName:    resourceName,
 				State:      "Approved",
-				ReviewName: "test",
+				ReviewName: jobRequestReviewName,
 			}
 
 			jobRequest := jobRequestBuilder(resourceName, resourceName, requestNamespaceName, containerName)
@@ -249,6 +249,8 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Expect(k8sClient.Get(ctx, appsTypeNamespacedName, actualStartedJobRequest)).To(Succeed())
 
 			Expect(actualStartedJobRequest.Status.State).To(Equal("Started"))
+			Expect(actualStartedJobRequest.Status.JobName).To(Equal(resourceName))
+			Expect(actualStartedJobRequest.Status.ReviewName).To(Equal(jobRequestReviewName))
 
 			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()).NotTo(BeNil())
 			Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(resourceName))
@@ -416,7 +418,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			jobRequestStatus := platformv1.JobRequestStatus{
 				JobName:    resourceName,
 				State:      "Approved",
-				ReviewName: "test",
+				ReviewName: jobRequestReviewName,
 			}
 			jobRequest := jobRequestBuilder(resourceName, resourceName, requestNamespaceName, containerName)
 
@@ -458,6 +460,8 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Expect(k8sClient.Get(ctx, appsTypeNamespacedName, actualStartedJobRequest)).To(Succeed())
 
 			Expect(actualStartedJobRequest.Status.State).To(Equal("Started"))
+			Expect(actualStartedJobRequest.Status.JobName).To(Equal(resourceName))
+			Expect(actualStartedJobRequest.Status.ReviewName).To(Equal(jobRequestReviewName))
 
 			_, reconcileErr := controllerReconciler.Reconcile(ctx, reconcile.Request{
 				NamespacedName: appsTypeNamespacedName,

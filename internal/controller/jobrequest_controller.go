@@ -189,6 +189,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 			r.setState(ctx, jobRequest, "Failed")
 			return ctrl.Result{}, err
 		}
+		jobRequest.Status.JobName = jobTemplate.GetName()
 		r.setState(ctx, jobRequest, "Started")
 		return ctrl.Result{}, nil
 	case "Failed":
