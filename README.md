@@ -168,6 +168,17 @@ The release process works as follows:
    4. Creates a GitHub Release with the packaged binary and creates a changelog based on commits since last release
    5. Builds a container image
 
+## IDE Settings
+
+In order for `gopls` to pick up the `test/e2e` package ensure your IDE settings have `"-tags=e2e"` added. For VSCode:
+
+```
+{
+    "go.buildFlags": [
+        "-tags=e2e"
+    ]
+}
+```
 
 ## Team
 

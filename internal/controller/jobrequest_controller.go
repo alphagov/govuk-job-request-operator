@@ -24,7 +24,9 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
+
+	"k8s.io/client-go/tools/events"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,6 +41,7 @@ type JobRequestReconciler struct {
 	CacheClient     client.Client
 	ApiServerClient client.Reader
 	Scheme          *runtime.Scheme
+	Recorder        events.EventRecorder
 	Log             logr.Logger
 }
 
@@ -49,6 +52,7 @@ const pending = "Pending"
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;create
+// +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequest := &platformv1.JobRequest{}
@@ -80,10 +84,14 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName client.ObjectKey, jobRequest *platformv1.JobRequest) bool {
 	err := r.CacheClient.Get(ctx, namespaceName, jobRequest)
 	if err != nil {
+		var errorLogMessage string
 		if apierrors.IsNotFound(err) {
-			r.Log.Error(err, "JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation")
+			errorLogMessage = "JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation"
+		} else {
+			errorLogMessage = "Failed to deserialize JobRequest. Ignoring and ending reconciliation"
 		}
-		r.Log.Error(err, "Failed to deserialize JobRequest. Ignoring and ending reconciliation")
+
+		r.Log.Error(err, errorLogMessage)
 		return false
 	}
 	return true
@@ -91,7 +99,6 @@ func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName 
 
 func endReconcile(jobRequestState string) bool {
 	return slices.Contains([]string{
-		"Rejected",
 		"Completed",
 		"Failed",
 		"Malformed",
@@ -106,6 +113,7 @@ func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest
 
 	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
 		r.Log.Error(err, "Failed to retrieve target resource")
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Failed", "None", "Target resource could not be found")
 		r.setState(ctx, jobRequest, "Failed")
 		return &ctrl.Result{}, nil
 	}
@@ -119,18 +127,20 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	if len(targetContainer) == 0 {
 		err := errors.New("container not found in resource")
 		r.Log.Error(err, "Target container, to create the job from is not found in target resource")
+		r.Recorder.Eventf(&jobRequest, nil, corev1.EventTypeWarning, "Failed", "None", "Target container on Deployment could not be found")
 		r.setState(ctx, &jobRequest, "Failed")
+
 		return nil
 	}
 
 	job := batch.Job{}
-	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
-	jobTemplatePodSpec.Spec.Containers = targetContainer
-	jobTemplatePodSpec.Spec.RestartPolicy = "Never"
 	job.Labels = make(map[string]string)
 	job.Annotations = make(map[string]string)
 	job.Name = resource.Name
 	job.Namespace = resource.Namespace
+	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
+	jobTemplatePodSpec.Spec.Containers = targetContainer
+	jobTemplatePodSpec.Spec.RestartPolicy = "Never"
 	job.Spec.Template = jobTemplatePodSpec
 
 	maps.Copy(job.Annotations, resource.Annotations)
@@ -138,6 +148,7 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 
 	if err := ctrl.SetControllerReference(&jobRequest, &job, r.Scheme); err != nil {
 		r.Log.Error(err, "Failed to create Job Template from Deployment")
+		r.Recorder.Eventf(&jobRequest, nil, corev1.EventTypeWarning, "Failed", "None", "JobTemplate could not be created from Deployment")
 		r.setState(ctx, &jobRequest, "Failed")
 		return &job
 	}
@@ -145,8 +156,8 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	return &job
 }
 
-func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) []v1.Container {
-	targetContainer := make([]v1.Container, 0)
+func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platformv1.JobRequest) []corev1.Container {
+	targetContainer := make([]corev1.Container, 0)
 
 	for _, c := range resource.Spec.Template.Spec.Containers {
 		if c.Name == jobRequest.Spec.ContainerFrom.ContainerName {
@@ -171,6 +182,10 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 	}
 
 	if len(jobRequestReviewList.Items) == 0 {
+		if jobRequest.Status.State == "" {
+			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Pending", "None", "JobRequest is waiting for a JobRequestReview")
+			return pending
+		}
 		return pending
 	}
 
@@ -183,19 +198,25 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 		r.setState(ctx, jobRequest, pending)
 		return ctrl.Result{}, nil
 	case "Approved":
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Approved", "None", "JobRequest is Approved")
 		err := r.CacheClient.Create(ctx, jobTemplate)
 		if err != nil {
 			r.Log.Error(err, "Failed to create Job resource")
+			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Failed", "None", "Failed to create Job")
 			r.setState(ctx, jobRequest, "Failed")
 			return ctrl.Result{}, err
 		}
 		jobRequest.Status.JobName = jobTemplate.GetName()
 		r.setState(ctx, jobRequest, "Started")
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Started", "None", "Job is created")
+		return ctrl.Result{}, nil
+	case "Rejected":
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Rejected", "None", "JobRequest is Rejected")
 		return ctrl.Result{}, nil
 	case "Failed":
 		r.setState(ctx, jobRequest, "Failed")
 		return ctrl.Result{}, nil
-	case "Rejected", "Started", "Completed", "Malformed":
+	case "Started", "Completed", "Malformed":
 		return ctrl.Result{}, nil
 	default:
 		return ctrl.Result{}, nil
