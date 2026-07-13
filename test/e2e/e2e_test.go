@@ -34,9 +34,9 @@ import (
 )
 
 // namespace where the operator is deployed in
-const namespace = "govuk-job-request-operator-system"
+const controllerNamespace = "govuk-job-request-operator-system"
 
-// app namespace where resources are deployed in
+// namespace where resources are deployed in
 const appNamespace = "apps"
 
 // serviceAccountName created for the project
@@ -48,6 +48,7 @@ const metricsServiceName = "govuk-job-request-operator-controller-manager-metric
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "govuk-job-request-operator-metrics-binding"
 
+// fixtures
 const govukReplatformTestAppDeployment = "deployment.yaml"
 const jobRequest = "jobRequest.yaml"
 const jobRequestReviewApproved = "jobRequestReviewApproved.yaml"
@@ -58,12 +59,12 @@ var _ = Describe("Manager", Ordered, func() {
 
 	BeforeAll(func() {
 		By("creating manager namespace")
-		cmd := exec.Command("kubectl", "create", "ns", namespace)
+		cmd := exec.Command("kubectl", "create", "ns", controllerNamespace)
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
 
 		By("labeling the namespace to enforce the restricted security policy")
-		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", namespace,
+		cmd = exec.Command("kubectl", "label", "--overwrite", "ns", controllerNamespace,
 			"pod-security.kubernetes.io/enforce=restricted")
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
@@ -92,7 +93,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
-		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
+		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", controllerNamespace)
 		_, _ = utils.Run(cmd)
 
 		By("removing apps namespace")
@@ -108,20 +109,20 @@ var _ = Describe("Manager", Ordered, func() {
 		_, _ = utils.Run(cmd)
 
 		By("removing manager namespace")
-		cmd = exec.Command("kubectl", "delete", "ns", namespace)
+		cmd = exec.Command("kubectl", "delete", "ns", controllerNamespace)
 		_, _ = utils.Run(cmd)
 	})
 
 	BeforeEach(func() {
-		By("cleaning up the JobReview")
+		By("clean up JobReviews")
 		cmd := exec.Command("kubectl", "delete", "jrr", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
 
-		By("cleaning up the JobRequest")
+		By("clean up JobRequests")
 		cmd = exec.Command("kubectl", "delete", "jr", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
 
-		By("cleaning up the Deployment")
+		By("clean up Deployments")
 		cmd = exec.Command("kubectl", "delete", "deployment", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
 	})
@@ -130,7 +131,7 @@ var _ = Describe("Manager", Ordered, func() {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
 			By("Fetching controller manager pod logs")
-			cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+			cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", controllerNamespace)
 			controllerLogs, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Controller logs:\n %s", controllerLogs)
@@ -139,7 +140,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching Kubernetes events")
-			cmd = exec.Command("kubectl", "get", "events", "-n", namespace, "--sort-by=.lastTimestamp")
+			cmd = exec.Command("kubectl", "get", "events", "-n", controllerNamespace, "--sort-by=.lastTimestamp")
 			eventsOutput, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Kubernetes events:\n%s", eventsOutput)
@@ -148,7 +149,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching curl-metrics logs")
-			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
+			cmd = exec.Command("kubectl", "logs", "curl-metrics", "-n", controllerNamespace)
 			metricsOutput, err := utils.Run(cmd)
 			if err == nil {
 				_, _ = fmt.Fprintf(GinkgoWriter, "Metrics logs:\n %s", metricsOutput)
@@ -157,7 +158,7 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 
 			By("Fetching controller manager pod description")
-			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", namespace)
+			cmd = exec.Command("kubectl", "describe", "pod", controllerPodName, "-n", controllerNamespace)
 			podDescription, err := utils.Run(cmd)
 			if err == nil {
 				fmt.Println("Pod description:\n", podDescription)
@@ -181,7 +182,7 @@ var _ = Describe("Manager", Ordered, func() {
 						"{{ if not .metadata.deletionTimestamp }}"+
 						"{{ .metadata.name }}"+
 						"{{ \"\\n\" }}{{ end }}{{ end }}",
-					"-n", namespace,
+					"-n", controllerNamespace,
 				)
 
 				podOutput, err := utils.Run(cmd)
@@ -194,7 +195,7 @@ var _ = Describe("Manager", Ordered, func() {
 				By("validating the pod's status")
 				cmd = exec.Command("kubectl", "get",
 					"pods", controllerPodName, "-o", "jsonpath={.status.phase}",
-					"-n", namespace,
+					"-n", controllerNamespace,
 				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -207,13 +208,13 @@ var _ = Describe("Manager", Ordered, func() {
 			By("creating a ClusterRoleBinding for the service account to allow access to metrics")
 			cmd := exec.Command("kubectl", "create", "clusterrolebinding", metricsRoleBindingName,
 				"--clusterrole=govuk-job-request-operator-metrics-reader",
-				fmt.Sprintf("--serviceaccount=%s:%s", namespace, serviceAccountName),
+				fmt.Sprintf("--serviceaccount=%s:%s", controllerNamespace, serviceAccountName),
 			)
 			_, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create ClusterRoleBinding")
 
 			By("validating that the metrics service is available")
-			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", namespace)
+			cmd = exec.Command("kubectl", "get", "service", metricsServiceName, "-n", controllerNamespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Metrics service should exist")
 
@@ -224,7 +225,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("ensuring the controller pod is ready")
 			verifyControllerPodReady := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "pod", controllerPodName, "-n", namespace,
+				cmd := exec.Command("kubectl", "get", "pod", controllerPodName, "-n", controllerNamespace,
 					"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
@@ -234,7 +235,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("verifying that the controller manager is serving the metrics server")
 			verifyMetricsServerStarted := func(g Gomega) {
-				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", controllerNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("Serving metrics server"),
@@ -246,7 +247,7 @@ var _ = Describe("Manager", Ordered, func() {
 
 			By("creating the curl-metrics pod to access the metrics endpoint")
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
-				"--namespace", namespace,
+				"--namespace", controllerNamespace,
 				"--image=curlimages/curl:latest",
 				"--overrides",
 				fmt.Sprintf(`{
@@ -273,7 +274,7 @@ var _ = Describe("Manager", Ordered, func() {
 						}],
 						"serviceAccountName": "%s"
 					}
-				}`, token, metricsServiceName, namespace, serviceAccountName))
+				}`, token, metricsServiceName, controllerNamespace, serviceAccountName))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
 
@@ -281,12 +282,12 @@ var _ = Describe("Manager", Ordered, func() {
 			verifyCurlUp := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "pods", "curl-metrics",
 					"-o", "jsonpath={.status.phase}",
-					"-n", namespace)
+					"-n", controllerNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Succeeded"), "curl pod in wrong status")
 			}
-			Eventually(verifyCurlUp, 5*time.Minute).Should(Succeed())
+			Eventually(verifyCurlUp).Should(Succeed())
 
 			By("getting the metrics by checking curl-metrics logs")
 			verifyMetricsAvailable := func(g Gomega) {
@@ -295,7 +296,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(metricsOutput).NotTo(BeEmpty())
 				g.Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
 			}
-			Eventually(verifyMetricsAvailable, 2*time.Minute).Should(Succeed())
+			Eventually(verifyMetricsAvailable).Should(Succeed())
 		})
 
 		It("should successfully create a job", func() {
@@ -317,7 +318,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
 			}
-			Eventually(verifyDeploymentUp, 5*time.Minute).Should(Succeed())
+			Eventually(verifyDeploymentUp).Should(Succeed())
 
 			By("creating a JobRequest")
 			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequest)
@@ -336,7 +337,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
 			}
-			Eventually(verifyJobRequestUp, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobRequestUp).Should(Succeed())
 
 			By("creating a JobRequestReview to approve the JobRequest")
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
@@ -347,6 +348,7 @@ var _ = Describe("Manager", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
 
+			By("JobRequestReview is in Approved state")
 			verifyJobRequestReviewUp := func(g Gomega) {
 				cmd = exec.Command("kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
@@ -355,19 +357,19 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
 			}
-			Eventually(verifyJobRequestReviewUp, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobRequestReviewUp).Should(Succeed())
 
 			By("JobRequest is in Started state")
 			verifyJobRequestStarted := func(g Gomega) {
+				jobRequestStateJSON := `{"jobName":"govuk-replatform-test-app","reviewName":"govuk-replatform-test-app","state":"Started"}`
 				cmd = exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
+					"-o", "jsonpath={.status}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Started"), "JobRequest in wrong status")
+				g.Expect(output).Should(MatchJSON(jobRequestStateJSON))
 			}
-
-			Eventually(verifyJobRequestStarted, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobRequestStarted).Should(Succeed())
 
 			By("Job performs rake task")
 			verifyJobCompleted := func(g Gomega) {
@@ -379,7 +381,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(output).To(Equal("1"), "Job not succeeded")
 			}
 
-			Eventually(verifyJobCompleted, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobCompleted).Should(Succeed())
 
 			verifyJobOutput := func(g Gomega) {
 				cmd = exec.Command("kubectl", "logs", "jobs/govuk-replatform-test-app", "-n", appNamespace)
@@ -388,12 +390,11 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(output).To(ContainSubstring("Hello World!"))
 			}
 
-			Eventually(verifyJobOutput, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobOutput).Should(Succeed())
 		})
 
 		It("should not create a job when JobRequest is rejected", func() {
 			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
-
 			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
 
@@ -403,16 +404,14 @@ var _ = Describe("Manager", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
 
 			By("waiting for the govuk-replatform-test-app deployment to become available.")
-			//TODO: Use conditions rather than .availableReplicas
 			verifyDeploymentUp := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "deployments", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.availableReplicas}",
-					"-n", appNamespace)
+					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("1"), "curl pod in wrong status")
+				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
 			}
-			Eventually(verifyDeploymentUp, 5*time.Minute).Should(Succeed())
+			Eventually(verifyDeploymentUp).Should(Succeed())
 
 			By("creating a JobRequest")
 			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequest)
@@ -431,7 +430,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
 			}
-			Eventually(verifyJobRequestUp, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobRequestUp).Should(Succeed())
 
 			By("creating a JobRequestReview to reject the JobRequest")
 			jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejected)
@@ -450,19 +449,20 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Rejected"), "JobRequestReview in wrong status")
 			}
-			Eventually(verifyJobRequestReviewUp, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobRequestReviewUp).Should(Succeed())
 
 			By("JobRequest is in Rejected state")
 			verifyJobRequestStarted := func(g Gomega) {
+				jobRequestStateJSON := `{"reviewName":"govuk-replatform-test-app","state":"Rejected"}`
 				cmd = exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
+					"-o", "jsonpath={.status}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Rejected"), "JobRequest in wrong status")
+				g.Expect(output).Should(MatchJSON(jobRequestStateJSON), "JobRequest in wrong status")
 			}
 
-			Eventually(verifyJobRequestStarted, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobRequestStarted).Should(Succeed())
 
 			By("Job not created")
 			verifyJobNotStarted := func(g Gomega) {
@@ -471,7 +471,7 @@ var _ = Describe("Manager", Ordered, func() {
 				g.Expect(err).To(HaveOccurred())
 			}
 
-			Eventually(verifyJobNotStarted, 5*time.Minute).Should(Succeed())
+			Eventually(verifyJobNotStarted).Should(Succeed())
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
@@ -501,7 +501,7 @@ func serviceAccountToken() (string, error) {
 		By("executing kubectl command to create the token")
 		cmd := exec.Command("kubectl", "create", "--raw", fmt.Sprintf(
 			"/api/v1/namespaces/%s/serviceaccounts/%s/token",
-			namespace,
+			controllerNamespace,
 			serviceAccountName,
 		), "-f", tokenRequestFile)
 
@@ -523,7 +523,7 @@ func serviceAccountToken() (string, error) {
 // getMetricsOutput retrieves and returns the logs from the curl pod used to access the metrics endpoint.
 func getMetricsOutput() (string, error) {
 	By("getting the curl-metrics logs")
-	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", namespace)
+	cmd := exec.Command("kubectl", "logs", "curl-metrics", "-n", controllerNamespace)
 	return utils.Run(cmd)
 }
 
