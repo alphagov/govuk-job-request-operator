@@ -91,3 +91,15 @@ type JobRequestList struct {
 	metav1.ListMeta `json:"metadata,omitzero"`
 	Items           []JobRequest `json:"items"`
 }
+
+type JobRequestState string
+
+const (
+	JobRequestPending   JobRequestState = "Pending"
+	JobRequestApproved  JobRequestState = "Approved"
+	JobRequestRejected  JobRequestState = "Rejected"
+	JobRequestStarted   JobRequestState = "Started"
+	JobRequestCompleted JobRequestState = "Completed"
+	JobRequestFailed    JobRequestState = "Failed"
+	JobRequestMalformed JobRequestState = "Malformed"
+)

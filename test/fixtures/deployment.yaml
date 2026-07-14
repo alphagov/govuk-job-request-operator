@@ -13,7 +13,7 @@ spec:
         app: govuk-replatform-test-app
     spec:
       containers:
-      - image: ghcr.io/alphagov/govuk/govuk-replatform-test-app:v47
+      - image: ghcr.io/alphagov/govuk/govuk-replatform-test-app:v48
         imagePullPolicy: IfNotPresent
         name: app
         env:
