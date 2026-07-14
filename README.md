@@ -170,7 +170,7 @@ The release process works as follows:
 
 ## IDE Settings
 
-In order for `gopls` to pick up the `test/e2e` package ensure your IDE settings have `"-tags=e2e"` added. For VSCode:
+In order for `gopls` to pick up the `test/e2e` package ensure your IDE settings have `"-tags=e2e"` added. Set the following for VSCode in `settings.json` have the following:
 
 ```
 {

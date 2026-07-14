@@ -113,8 +113,8 @@ func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest
 
 	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
 		r.Log.Error(err, "Failed to retrieve target resource")
-		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Failed", "None", "Target resource could not be found")
-		r.setState(ctx, jobRequest, "Failed")
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Target resource could not be found")
+		r.setState(ctx, jobRequest, "Malformed")
 		return &ctrl.Result{}, nil
 	}
 
@@ -127,8 +127,8 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	if len(targetContainer) == 0 {
 		err := errors.New("container not found in resource")
 		r.Log.Error(err, "Target container, to create the job from is not found in target resource")
-		r.Recorder.Eventf(&jobRequest, nil, corev1.EventTypeWarning, "Failed", "None", "Target container on Deployment could not be found")
-		r.setState(ctx, &jobRequest, "Failed")
+		r.Recorder.Eventf(&jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Target container on Deployment could not be found")
+		r.setState(ctx, &jobRequest, "Malformed")
 
 		return nil
 	}
@@ -136,7 +136,7 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	job := batch.Job{}
 	job.Labels = make(map[string]string)
 	job.Annotations = make(map[string]string)
-	job.Name = resource.Name
+	job.Name = jobRequest.Name
 	job.Namespace = resource.Namespace
 	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
 	jobTemplatePodSpec.Spec.Containers = targetContainer
@@ -147,9 +147,9 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	maps.Copy(job.Labels, resource.Labels)
 
 	if err := ctrl.SetControllerReference(&jobRequest, &job, r.Scheme); err != nil {
-		r.Log.Error(err, "Failed to create Job Template from Deployment")
-		r.Recorder.Eventf(&jobRequest, nil, corev1.EventTypeWarning, "Failed", "None", "JobTemplate could not be created from Deployment")
-		r.setState(ctx, &jobRequest, "Failed")
+		r.Log.Error(err, "Failed to set ControllerReference on Job. Another OwnerReference has already been set.")
+		r.Recorder.Eventf(&jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "ControllerReference could not be set on Job as another OwnerReference has already been set.")
+		r.setState(ctx, &jobRequest, "Malformed")
 		return &job
 	}
 
@@ -202,8 +202,8 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 		err := r.CacheClient.Create(ctx, jobTemplate)
 		if err != nil {
 			r.Log.Error(err, "Failed to create Job resource")
-			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Failed", "None", "Failed to create Job")
-			r.setState(ctx, jobRequest, "Failed")
+			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Malformed", "None", "Failed to create Job")
+			r.setState(ctx, jobRequest, "Malformed")
 			return ctrl.Result{}, err
 		}
 		jobRequest.Status.JobName = jobTemplate.GetName()
@@ -213,10 +213,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 	case "Rejected":
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Rejected", "None", "JobRequest is Rejected")
 		return ctrl.Result{}, nil
-	case "Failed":
-		r.setState(ctx, jobRequest, "Failed")
-		return ctrl.Result{}, nil
-	case "Started", "Completed", "Malformed":
+	case "Started", "Completed", "Failed", "Malformed":
 		return ctrl.Result{}, nil
 	default:
 		return ctrl.Result{}, nil
