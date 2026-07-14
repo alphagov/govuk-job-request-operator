@@ -37,7 +37,7 @@ var (
 	// shouldCleanupCertManager tracks whether CertManager was installed by this suite.
 	shouldCleanupCertManager = false
 	// govukReplatformTestAppImage is the image used for testing
-	govukReplatformTestAppImage = "ghcr.io/alphagov/govuk/govuk-replatform-test-app:v47"
+	govukReplatformTestAppImage = "ghcr.io/alphagov/govuk/govuk-replatform-test-app:v48"
 )
 
 // To skip CertManager installation, set: CERT_MANAGER_INSTALL_SKIP=true
