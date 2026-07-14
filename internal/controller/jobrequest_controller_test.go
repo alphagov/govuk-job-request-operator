@@ -49,7 +49,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 		jobRequestName := "request"
 		jobRequestReviewName := "review"
 		jobOpts := []client.ListOption{
-			client.MatchingFields{"metadata.name": deploymentName},
+			client.MatchingFields{"metadata.name": jobRequestName},
 		}
 		eventOpts := []client.ListOption{
 			client.MatchingFields{"reportingController": "jobrequest-controller"},
@@ -154,7 +154,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(jobRequest.Status.State).To(Equal("Started"))
-				g.Expect(jobRequest.Status.JobName).To(Equal(deploymentName))
+				g.Expect(jobRequest.Status.JobName).To(Equal(jobRequestName))
 				g.Expect(eventList.Items).To(HaveLen(3))
 				g.Expect(eventList.Items[1].Reason).To(Equal("Approved"))
 				g.Expect(eventList.Items[2].Reason).To(Equal("Started"))
@@ -165,7 +165,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 				g.Expect(jobList.Items).To(HaveLen(1))
-				g.Expect(jobList.Items[0].GetName()).To(Equal(deploymentName))
+				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
 				g.Expect(jobList.Items[0].GetNamespace()).To(Equal(appNamespaceName))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Name).To(Equal("foo"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -198,9 +198,9 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequest.Status.State).To(Equal("Failed"))
+				g.Expect(jobRequest.Status.State).To(Equal("Malformed"))
 				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Failed"))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Malformed"))
 			}).Should(Succeed())
 		})
 
@@ -216,9 +216,9 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequest.Status.State).To(Equal("Failed"))
+				g.Expect(jobRequest.Status.State).To(Equal("Malformed"))
 				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Failed"))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Malformed"))
 			}).Should(Succeed())
 		})
 
@@ -284,13 +284,13 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			}).Should(Succeed())
 		})
 
-		It("should successfully reconcile with no job created when JobRequest is 'Failed'", func() {
+		It("should successfully reconcile with no job created when JobRequest is 'Malformed'", func() {
 			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
 			targetResource := deploymentBuilder(jobRequestName, appNamespaceName)
 			jobRequestReview := jobRequestReviewBuilder(deploymentName, appNamespaceName, jobRequestReviewName, "Approved")
 
 			jobRequestStatus := platformv1.JobRequestStatus{
-				State: "Failed",
+				State: "Malformed",
 			}
 
 			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
@@ -307,7 +307,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-				g.Expect(jobRequest.Status.State).To(Equal("Failed"))
+				g.Expect(jobRequest.Status.State).To(Equal("Malformed"))
 			}).Should(Succeed())
 		})
 	})
