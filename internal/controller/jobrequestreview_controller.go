@@ -149,7 +149,7 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 
 		return r.handleReviewDecision(ctx, jobRequest, jobRequestReview)
 
-	case "Approved", "Rejected", "Started", "Failed", "Completed":
+	case "Approved", "Rejected", "Started", "Failed", "Complete":
 		return ctrl.Result{}, nil
 
 	default:

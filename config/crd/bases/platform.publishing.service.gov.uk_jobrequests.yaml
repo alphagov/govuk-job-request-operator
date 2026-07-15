@@ -117,7 +117,7 @@ spec:
                 - Approved
                 - Rejected
                 - Started
-                - Completed
+                - Complete
                 - Failed
                 - Malformed
                 type: string
