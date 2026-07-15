@@ -99,7 +99,7 @@ func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName 
 
 func endReconcile(jobRequestState string) bool {
 	return slices.Contains([]string{
-		"Completed",
+		"Complete",
 		"Failed",
 		"Malformed",
 	}, jobRequestState)
@@ -213,7 +213,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 	case "Rejected":
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Rejected", "None", "JobRequest is Rejected")
 		return ctrl.Result{}, nil
-	case "Started", "Completed", "Failed", "Malformed":
+	case "Started", "Complete", "Failed", "Malformed":
 		return ctrl.Result{}, nil
 	default:
 		return ctrl.Result{}, nil
