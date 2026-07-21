@@ -18,9 +18,12 @@ package controller
 
 import (
 	"context"
+	"maps"
 	"time"
 
-	"k8s.io/client-go/kubernetes/scheme"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+
 	"k8s.io/utils/ptr"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -33,6 +36,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
@@ -40,6 +44,9 @@ import (
 
 var _ = Describe("JobRequest Controller", Ordered, func() {
 	Context("When reconciling a resource", func() {
+		scheme := runtime.NewScheme()
+		utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+		utilruntime.Must(platformv1.AddToScheme(scheme))
 		ctx, cancel := context.WithCancel(context.Background())
 		SetDefaultEventuallyTimeout(10 * time.Second)
 
@@ -70,7 +77,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 		BeforeAll(func() {
 			By("create the manager")
 			mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-				Scheme: scheme.Scheme,
+				Scheme: scheme,
 			})
 			Expect(err).ToNot(HaveOccurred())
 
@@ -107,6 +114,12 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			opts.GracePeriodSeconds = &graceSecs
 			opts.PropagationPolicy = &background
 
+			By("tearing down the Pods")
+			Expect(k8sClient.DeleteAllOf(ctx, &v1.Pod{}, opts)).To(Succeed())
+
+			By("tearing down the Jobs")
+			Expect(k8sClient.DeleteAllOf(ctx, &batch.Job{}, opts)).To(Succeed())
+
 			By("tearing down the JobRequests")
 			Expect(k8sClient.DeleteAllOf(ctx, &platformv1.JobRequest{}, opts)).To(Succeed())
 
@@ -116,14 +129,11 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			By("tearing down the Deployments")
 			Expect(k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, opts)).To(Succeed())
 
-			By("tearing down the Jobs")
-			Expect(k8sClient.DeleteAllOf(ctx, &batch.Job{}, opts)).To(Succeed())
-
 			By("tearing down the Events")
 			Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, opts)).To(Succeed())
 		})
 
-		It("should successfully reconcile when JobRequest is 'Approved' and the job created", func() {
+		It("should successfully reconcile when JobRequest is 'Approved' and the job successfully runs", func() {
 			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
 			targetResource := deploymentBuilder(deploymentName, appNamespaceName)
 			jobRequestReview := jobRequestReviewBuilder(jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
@@ -167,6 +177,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(jobList.Items).To(HaveLen(1))
 				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
 				g.Expect(jobList.Items[0].GetNamespace()).To(Equal(appNamespaceName))
+				g.Expect(jobList.Items[0].Spec.BackoffLimit).To(Equal(ptr.To(int32(0))))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Name).To(Equal("foo"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers).To(HaveLen(1))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Image).To(Equal("foo/bar"))
@@ -186,6 +197,216 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()).NotTo(BeNil())
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(jobRequestName))
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Kind).To(Equal("JobRequest"))
+			}).Should(Succeed())
+
+			startTime := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+			completionTime := metav1.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+
+			jobStatus := batch.JobStatus{
+				StartTime:      &startTime,
+				CompletionTime: &completionTime,
+				Succeeded:      1,
+				Conditions: []batch.JobCondition{{
+					Type:   batch.JobSuccessCriteriaMet,
+					Status: v1.ConditionTrue,
+				}, {
+					Type:   batch.JobComplete,
+					Status: v1.ConditionTrue,
+				}},
+			}
+
+			job := jobList.Items[0]
+			job.Status = jobStatus
+			Expect(k8sClient.Status().Update(ctx, &job)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal("Complete"))
+				g.Expect(jobRequest.Status.JobName).To(Equal(jobRequestName))
+				g.Expect(eventList.Items).To(HaveLen(4))
+				g.Expect(eventList.Items[3].Reason).To(Equal("Complete"))
+			}).Should(Succeed())
+		})
+
+		It("should successfully reconcile when JobRequest is 'Started' and there is no job", func() {
+			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
+			targetResource := deploymentBuilder(deploymentName, appNamespaceName)
+			jobRequestReview := jobRequestReviewBuilder(jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
+
+			jobRequestStatus := platformv1.JobRequestStatus{
+				State:      "Started",
+				ReviewName: jobRequestReviewName,
+			}
+
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+			eventList := &eventsv1.EventList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal("Pending"))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
+			}).Should(Succeed())
+
+			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+			jobRequest.Status = jobRequestStatus
+			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal("Malformed"))
+				g.Expect(eventList.Items).To(HaveLen(2))
+				g.Expect(eventList.Items[1].Reason).To(Equal("Malformed"))
+			}).Should(Succeed())
+		})
+
+		It("should successfully reconcile when JobRequest is 'Approved' no new job is created when it already exists", func() {
+			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
+			targetResource := deploymentBuilder(deploymentName, appNamespaceName)
+			jobRequestReview := jobRequestReviewBuilder(jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
+
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+			eventList := &eventsv1.EventList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal("Pending"))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
+			}).Should(Succeed())
+
+			job := &batch.Job{}
+			job.Labels = make(map[string]string)
+			job.Annotations = make(map[string]string)
+			job.Name = jobRequest.Name
+			job.Namespace = targetResource.Namespace
+			jobTemplatePodSpec := *targetResource.Spec.Template.DeepCopy()
+			jobTemplatePodSpec.Spec.Containers = targetResource.Spec.Template.Spec.Containers
+			jobTemplatePodSpec.Spec.RestartPolicy = v1.RestartPolicyNever
+			job.Spec.Template = jobTemplatePodSpec
+			job.Spec.BackoffLimit = ptr.To(int32(0))
+			maps.Copy(job.Annotations, targetResource.Annotations)
+			maps.Copy(job.Labels, targetResource.Labels)
+			_ = ctrl.SetControllerReference(jobRequest, job, scheme)
+
+			jobRequestStatus := platformv1.JobRequestStatus{
+				State:      "Approved",
+				ReviewName: jobRequestReviewName,
+			}
+
+			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+			Expect(k8sClient.Create(ctx, job)).To(Succeed())
+
+			jobRequest.Status = jobRequestStatus
+			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+			jobList := &batch.JobList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
+				g.Expect(jobList.Items).To(HaveLen(1))
+			}).Should(Succeed())
+		})
+
+		It("should successfully reconcile when JobRequest is 'Approved' and the job is in a failed state", func() {
+			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
+			targetResource := deploymentBuilder(deploymentName, appNamespaceName)
+			jobRequestReview := jobRequestReviewBuilder(jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
+
+			jobRequestStatus := platformv1.JobRequestStatus{
+				State:      "Approved",
+				ReviewName: jobRequestReviewName,
+			}
+
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+			eventList := &eventsv1.EventList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal("Pending"))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
+			}).Should(Succeed())
+
+			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+			jobRequest.Status = jobRequestStatus
+			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal("Started"))
+				g.Expect(jobRequest.Status.JobName).To(Equal(jobRequestName))
+				g.Expect(eventList.Items).To(HaveLen(3))
+				g.Expect(eventList.Items[1].Reason).To(Equal("Approved"))
+				g.Expect(eventList.Items[2].Reason).To(Equal("Started"))
+			}).Should(Succeed())
+
+			jobList := &batch.JobList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
+				g.Expect(jobList.Items).To(HaveLen(1))
+				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
+				g.Expect(jobList.Items[0].GetNamespace()).To(Equal(appNamespaceName))
+				g.Expect(jobList.Items[0].Spec.BackoffLimit).To(Equal(ptr.To(int32(0))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Name).To(Equal("foo"))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers).To(HaveLen(1))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Image).To(Equal("foo/bar"))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("foo"))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("bar"))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(ptr.To(false)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop[0]).To(BeEquivalentTo("all"))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem).To(Equal(ptr.To(true)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(Equal(ptr.To(true)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(Equal(ptr.To(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsGroup).To(Equal(ptr.To(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(ptr.To(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(BeEquivalentTo("RuntimeDefault"))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
+				g.Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
+				g.Expect(jobList.Items[0].Labels["fizz"]).To(Equal("buzz"))
+				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()).NotTo(BeNil())
+				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(jobRequestName))
+				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Kind).To(Equal("JobRequest"))
+			}).Should(Succeed())
+
+			startTime := metav1.Now()
+
+			jobStatus := batch.JobStatus{
+				StartTime: &startTime,
+				Failed:    1,
+				Conditions: []batch.JobCondition{{
+					Type:   batch.JobFailureTarget,
+					Status: v1.ConditionTrue,
+				}, {
+					Type:   batch.JobFailed,
+					Status: v1.ConditionTrue,
+				}},
+			}
+
+			job := jobList.Items[0]
+			job.Status = jobStatus
+			Expect(k8sClient.Status().Update(ctx, &job)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal("Failed"))
+				g.Expect(jobRequest.Status.JobName).To(Equal(jobRequestName))
+				g.Expect(eventList.Items).To(HaveLen(4))
+				g.Expect(eventList.Items[3].Reason).To(Equal("Failed"))
 			}).Should(Succeed())
 		})
 
