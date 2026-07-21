@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
-	batch "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -118,9 +117,6 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			By("tearing down the Deployments")
 			Expect(k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, opts)).To(Succeed())
 
-			By("tearing down the Jobs")
-			Expect(k8sClient.DeleteAllOf(ctx, &batch.Job{}, opts)).To(Succeed())
-
 			By("tearing down the Events")
 			Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, opts)).To(Succeed())
 		})
@@ -135,9 +131,9 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal("JobRequestNotFound"))
+				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewNotFound))
 				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("JobRequestNotFound"))
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewNotFound)))
 			}).Should(Succeed())
 		})
 
@@ -147,7 +143,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 
 			jobRequestStatus := platformv1.JobRequestStatus{
 				JobName:    deploymentName,
-				State:      "Pending",
+				State:      platformv1.JobRequestPending,
 				ReviewName: jobRequestReviewName,
 			}
 
@@ -159,7 +155,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(""))
+				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewState("")))
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
 			}).Should(Succeed())
@@ -170,9 +166,9 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal("Approved"))
+				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewApproved))
 				g.Expect(eventList.Items).To(HaveLen(2))
-				g.Expect(eventList.Items[1].Reason).To(Equal("Approved"))
+				g.Expect(eventList.Items[1].Reason).To(Equal(string(platformv1.JobRequestReviewApproved)))
 			}, 20*time.Second).Should(Succeed())
 		})
 
@@ -182,7 +178,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 
 			jobRequestStatus := platformv1.JobRequestStatus{
 				JobName:    deploymentName,
-				State:      "Malformed",
+				State:      platformv1.JobRequestMalformed,
 				ReviewName: jobRequestReviewName,
 			}
 
@@ -196,9 +192,9 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			Eventually(func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal("JobRequestMalformed"))
+				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewMalformed))
 				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("JobRequestMalformed"))
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewMalformed)))
 			}).Should(Succeed())
 		})
 
@@ -207,7 +203,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
 
 			jobRequestStatus := platformv1.JobRequestStatus{
-				State: "Pending",
+				State: platformv1.JobRequestPending,
 			}
 
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
@@ -221,11 +217,11 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal("Approved"))
-				g.Expect(jobRequest.Status.State).To(Equal("Approved"))
+				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewApproved))
+				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestApproved))
 				g.Expect(jobRequest.Status.ReviewName).To(Equal(jobRequestReviewName))
 				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewApproved)))
 			}).Should(Succeed())
 		})
 
@@ -234,7 +230,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
 
 			jobRequestStatus := platformv1.JobRequestStatus{
-				State: "Pending",
+				State: platformv1.JobRequestPending,
 			}
 
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
@@ -248,11 +244,11 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal("Rejected"))
-				g.Expect(jobRequest.Status.State).To(Equal("Rejected"))
+				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewRejected))
+				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestRejected))
 				g.Expect(jobRequest.Status.ReviewName).To(Equal(jobRequestReviewName))
 				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Rejected"))
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewRejected)))
 			}).Should(Succeed())
 		})
 	})

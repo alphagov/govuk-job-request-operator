@@ -46,8 +46,6 @@ type JobRequestReconciler struct {
 	Log             logr.Logger
 }
 
-const pending = "Pending"
-
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests/finalizers,verbs=update
@@ -98,11 +96,11 @@ func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName 
 	return true
 }
 
-func endReconcileIfInTerminalState(jobRequestState string) bool {
-	return slices.Contains([]string{
-		"Complete",
-		"Failed",
-		"Malformed",
+func endReconcileIfInTerminalState(jobRequestState platformv1.JobRequestState) bool {
+	return slices.Contains([]platformv1.JobRequestState{
+		platformv1.JobRequestComplete,
+		platformv1.JobRequestFailed,
+		platformv1.JobRequestMalformed,
 	}, jobRequestState)
 }
 
@@ -172,7 +170,7 @@ func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platf
 	return targetContainer
 }
 
-func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *platformv1.JobRequest) string {
+func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *platformv1.JobRequest) platformv1.JobRequestState {
 	jobRequestReviewList := &platformv1.JobRequestReviewList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"spec.jobRequestName": jobRequest.GetObjectMeta().GetName()},
@@ -180,21 +178,21 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 
 	if err := r.ApiServerClient.List(ctx, jobRequestReviewList, opts...); err != nil {
 		r.Log.Error(err, "Failed to retrieve JobRequestReview")
-		return pending
+		return platformv1.JobRequestPending
 	}
 
 	if len(jobRequestReviewList.Items) == 0 {
 		if jobRequest.Status.State == "" {
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Pending", "None", "JobRequest is waiting for a JobRequestReview")
-			return pending
+			return platformv1.JobRequestPending
 		}
-		return pending
+		return platformv1.JobRequestPending
 	}
 
 	return jobRequest.Status.State
 }
 
-func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState string, jobRequest *platformv1.JobRequest, jobTemplate client.Object, namespaceName client.ObjectKey) (ctrl.Result, error) {
+func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState platformv1.JobRequestState, jobRequest *platformv1.JobRequest, jobTemplate client.Object, namespaceName client.ObjectKey) (ctrl.Result, error) {
 	job := &batch.Job{}
 	jobNamespaceName := client.ObjectKey{
 		Namespace: jobRequest.Namespace,
@@ -202,10 +200,10 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 	}
 
 	switch jobRequestState {
-	case pending:
-		r.setState(ctx, jobRequest, pending)
+	case platformv1.JobRequestPending:
+		r.setState(ctx, jobRequest, platformv1.JobRequestPending)
 		return ctrl.Result{}, nil
-	case "Approved":
+	case platformv1.JobRequestApproved:
 		err := r.ApiServerClient.Get(ctx, jobNamespaceName, job)
 		if err != nil && apierrors.IsNotFound(err) {
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Approved", "None", "JobRequest is Approved")
@@ -213,22 +211,22 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 			if err != nil {
 				r.Log.Error(err, "Failed to create Job resource")
 				r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Failed to create Job")
-				r.setState(ctx, jobRequest, "Malformed")
+				r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 				return ctrl.Result{}, err
 			}
 
 			jobRequest.Status.JobName = jobTemplate.GetName()
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Started", "None", "Job is created")
-			r.setState(ctx, jobRequest, "Started")
+			r.setState(ctx, jobRequest, platformv1.JobRequestStarted)
 
 			return ctrl.Result{}, nil
 		}
 
 		return ctrl.Result{}, nil
-	case "Rejected":
-		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Rejected", "None", "JobRequest is Rejected")
+	case platformv1.JobRequestRejected:
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, string(platformv1.JobRequestRejected), "None", "JobRequest is Rejected")
 		return ctrl.Result{}, nil
-	case "Started":
+	case platformv1.JobRequestStarted:
 		err := r.ApiServerClient.Get(ctx, jobNamespaceName, job)
 		if err != nil {
 			var errorLogMessage string
@@ -238,8 +236,8 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 				errorLogMessage = "Failed to deserialize Job. Ignoring and ending reconciliation"
 			}
 			r.Log.Error(err, errorLogMessage)
-			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Job could not be found")
-			r.setState(ctx, jobRequest, "Malformed")
+			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", "Job could not be found")
+			r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 
 			return ctrl.Result{}, nil
 		}
@@ -253,11 +251,11 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 		for _, v := range job.Status.Conditions {
 			if (v.Type == batch.JobComplete || v.Type == batch.JobFailed) && v.Status == "True" {
 				// If JobRequest state is already in Complete or Failed don't emit the event
-				if jobRequest.Status.State != string(v.Type) {
+				if string(jobRequest.Status.State) != string(v.Type) {
 					r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, string(v.Type), "None", "Job is "+string(v.Type))
 				}
 
-				r.setState(ctx, jobRequest, string(v.Type))
+				r.setState(ctx, jobRequest, platformv1.JobRequestState(string(v.Type)))
 			}
 		}
 
@@ -267,7 +265,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 	}
 }
 
-func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platformv1.JobRequest, state string) {
+func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platformv1.JobRequest, state platformv1.JobRequestState) {
 	jobRequest.Status.State = state
 	err := r.CacheClient.Status().Update(ctx, jobRequest)
 	if err != nil {
