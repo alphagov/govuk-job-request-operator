@@ -88,8 +88,8 @@ func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobReque
 	}
 
 	if err := r.ApiServerClient.List(ctx, requestList, opts...); err != nil || len(requestList.Items) == 0 {
-		jobRequestReview.Status.State = "JobRequestNotFound"
-		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, "JobRequestNotFound", "None", "JobRequest could not be found")
+		jobRequestReview.Status.State = platformv1.JobRequestReviewNotFound
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewNotFound), "None", "JobRequest could not be found")
 		err := r.CacheClient.Status().Update(ctx, jobRequestReview)
 		if err != nil {
 			r.Log.Error(err, "Failed to update status of JobRequestReview resource")
@@ -103,7 +103,7 @@ func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobReque
 }
 
 func (r *JobRequestReviewReconciler) handleReviewDecision(ctx context.Context, jobRequest *platformv1.JobRequest, jobRequestReview *platformv1.JobRequestReview) (ctrl.Result, error) {
-	jobRequest.Status.State = jobRequestReview.Spec.Decision
+	jobRequest.Status.State = platformv1.JobRequestState(jobRequestReview.Spec.Decision)
 	r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeNormal, jobRequestReview.Spec.Decision, "None",
 		"JobRequest is %s", jobRequestReview.Spec.Decision)
 	updateErr := r.CacheClient.Status().Update(ctx, jobRequest)
@@ -112,7 +112,7 @@ func (r *JobRequestReviewReconciler) handleReviewDecision(ctx context.Context, j
 	}
 
 	if jobRequestReview.Status.State == "" {
-		jobRequestReview.Status.State = jobRequestReview.Spec.Decision
+		jobRequestReview.Status.State = platformv1.JobRequestReviewState(jobRequestReview.Spec.Decision)
 		updateReviewErr := r.CacheClient.Status().Update(ctx, jobRequestReview)
 		if updateReviewErr != nil {
 			r.Log.Error(updateReviewErr, "Failed to update status of JobRequestReview")
@@ -126,16 +126,16 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 	switch jobRequest.Status.State {
 	case "":
 		r.Log.Info("JobRequest hasn't finished creating so re-queueing the reconcile")
-		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeNormal, "Pending", "None", "JobRequest hasn't finished creating")
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeNormal, string(platformv1.JobRequestPending), "None", "JobRequest hasn't finished creating")
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 
-	case "Malformed":
+	case platformv1.JobRequestMalformed:
 		err := errors.New("JobRequest body Malformed")
 		r.Log.Error(err, "JobRequest is in a Malformed state so can't approve")
 
-		jobRequestReview.Status.State = "JobRequestMalformed"
+		jobRequestReview.Status.State = platformv1.JobRequestReviewMalformed
 
-		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, "JobRequestMalformed", "None", "JobRequest is in a Malformed state")
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", "JobRequest is in a Malformed state")
 		updateReviewErr := r.CacheClient.Status().Update(ctx, jobRequestReview)
 		if updateReviewErr != nil {
 			r.Log.Error(updateReviewErr, "Failed to update status of JobRequestReview")
@@ -143,13 +143,13 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 
 		return ctrl.Result{}, nil
 
-	case "Pending":
-		jobRequest.Status.State = jobRequestReview.Spec.Decision
+	case platformv1.JobRequestPending:
+		jobRequest.Status.State = platformv1.JobRequestState(jobRequestReview.Spec.Decision)
 		jobRequest.Status.ReviewName = jobRequestReview.GetName()
 
 		return r.handleReviewDecision(ctx, jobRequest, jobRequestReview)
 
-	case "Approved", "Rejected", "Started", "Failed", "Complete":
+	case platformv1.JobRequestApproved, platformv1.JobRequestRejected, platformv1.JobRequestStarted, platformv1.JobRequestFailed, platformv1.JobRequestComplete:
 		return ctrl.Result{}, nil
 
 	default:
