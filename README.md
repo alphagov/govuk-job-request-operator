@@ -12,6 +12,11 @@ brew install helm
 brew install k3d
 ```
 
+## Pre-commit hooks
+
+We have some [recommended pre-commit hooks](.pre-commit-config.yaml). You need
+to [install `pre-commit`](https://pre-commit.com/#install) for these to run.
+
 ### Custom Resource Definitions (CRDs)
 #### JobRequest
 
