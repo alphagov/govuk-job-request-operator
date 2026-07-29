@@ -11,6 +11,14 @@
       "matchPackageNames": ["alphagov/govuk-infrastructure"],
       "matchDepTypes": ["action"],
       "enabled": false
+    },
+    {
+      "matchPackageNames": [
+        "go",
+        "golang"
+      ],
+      "versioning": "go",
+      "groupName": "go"
     }
   ]
 }
