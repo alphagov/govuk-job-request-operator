@@ -171,7 +171,7 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 		return r.handleReviewDecision(ctx, jobRequest, jobRequestReview)
 
 	case platformv1.JobRequestRejected, platformv1.JobRequestApproved, platformv1.JobRequestStarted, platformv1.JobRequestComplete, platformv1.JobRequestFailed:
-		if jobRequestReview.Name == jobRequest.Status.ReviewName {
+		if jobRequest.WasReviewedBy(jobRequestReview) {
 			return ctrl.Result{}, nil
 		}
 
