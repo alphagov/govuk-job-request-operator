@@ -170,8 +170,51 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 
 		return r.handleReviewDecision(ctx, jobRequest, jobRequestReview)
 
-	default:
+	case platformv1.JobRequestRejected, platformv1.JobRequestApproved, platformv1.JobRequestStarted, platformv1.JobRequestComplete, platformv1.JobRequestFailed:
+		if jobRequestReview.Name == jobRequest.Status.ReviewName {
+			return ctrl.Result{}, nil
+		}
+
+		errorMessage := fmt.Sprintf(
+			"JobRequest already reviewed by JobRequestReview %s and is in state %s",
+			jobRequest.Status.ReviewName,
+			jobRequest.Status.State,
+		)
+
+		err := errors.New(errorMessage)
+
+		r.Log.Error(err, "JobRequest already reviewed")
+		jobRequestReview.Status.State = platformv1.JobRequestReviewConflict
+
+		r.Recorder.Eventf(
+			jobRequestReview,
+			nil,
+			corev1.EventTypeWarning,
+			string(platformv1.JobRequestReviewConflict),
+			"None",
+			errorMessage,
+		)
+
+		updateReviewErr := r.CacheClient.Status().Update(ctx, jobRequestReview)
+		if updateReviewErr != nil {
+			r.Log.Error(updateReviewErr, "Failed to update status of JobRequestReview to Conflict")
+		}
+
 		return ctrl.Result{}, nil
+	default:
+		err := fmt.Errorf("failed to reconcile JobRequestReview %s, JobRequest %s in an unknown state %s", jobRequestReview.Name, jobRequest.Name, jobRequest.Status.State)
+		r.Recorder.Eventf(
+			jobRequestReview,
+			jobRequest,
+			corev1.EventTypeWarning,
+			"Unknown JobRequest State",
+			"None",
+			"JobRequest %s in an unknown state %s",
+			jobRequest.Name,
+			jobRequest.Status.State,
+		)
+
+		return ctrl.Result{}, err
 	}
 }
 

@@ -258,5 +258,82 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewRejected)))
 			}).Should(Succeed())
 		})
+
+		DescribeTable("when the JobRequest has already been reviewed by another JobRequestReview",
+			func(previousJobRequestReviewState platformv1.JobRequestReviewState, jobRequestState platformv1.JobRequestState) {
+				// Create the JobRequest and the previous JobRequestReview
+				previousJobRequestReviewName := "previous-job-request-review"
+				previousJobRequestReviewNamespaceName := types.NamespacedName{
+					Name:      previousJobRequestReviewName,
+					Namespace: reviewNamespaceName,
+				}
+
+				previousJobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, previousJobRequestReviewName, string(previousJobRequestReviewState))
+				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+
+				// Allow the JobRequestReview to be reconcilled
+				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+				jobRequest.Status = platformv1.JobRequestStatus{
+					State: platformv1.JobRequestPending,
+				}
+				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+				Expect(k8sClient.Create(ctx, previousJobRequestReview)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, previousJobRequestReviewNamespaceName, previousJobRequestReview)).To(Succeed())
+					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+					// We aren't running reconcilliation for the JobRequest so we can only wait for its state to get into the state the Review had
+					g.Expect(string(jobRequest.Status.State)).To(Equal(string(previousJobRequestReviewState)))
+					g.Expect(previousJobRequestReview.Status.State).To(Equal(previousJobRequestReviewState))
+				}).Should(Succeed())
+
+				// Now set the JobRequst has been approved/rejeected set the state to the state under test
+				jobRequest.Status.State = jobRequestState
+				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+					g.Expect(jobRequest.Status.State).To(Equal(jobRequestState))
+				}).Should(Succeed())
+
+				// Clear all the events
+				Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, &client.DeleteAllOfOptions{
+					DeleteOptions: client.DeleteOptions{
+						GracePeriodSeconds: new(int64(0)),
+						PropagationPolicy:  new(metav1.DeletePropagationBackground),
+					},
+					ListOptions: client.ListOptions{
+						Namespace: reviewNamespaceName,
+					},
+				})).To(Succeed())
+
+				jobRequestVersion := jobRequest.ResourceVersion
+
+				// Create the new JobRequestReview
+				jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, string(platformv1.JobRequestReviewRejected))
+				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+
+				eventList := &eventsv1.EventList{}
+
+				// The JobRequest state and version should not change, and the JopRequestReview should go into the Conflict state
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
+					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+
+					g.Expect(jobRequest.Status.State).To(Equal(jobRequestState))
+					g.Expect(jobRequest.ResourceVersion).To(Equal(jobRequestVersion))
+					g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewConflict))
+
+					g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+					g.Expect(eventList.Items).To(HaveLen(1))
+					g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewConflict)))
+				}).Should(Succeed())
+			},
+			Entry("when the jobRequestReview was Rejected and the JobRequest is now in a Rejected state", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+			Entry("when the jobRequestReview was Approved and the JobRequest is now in a Approved state", platformv1.JobRequestReviewApproved, platformv1.JobRequestApproved),
+			Entry("when the jobRequestReview was Accepted and the JobRequest is now in a Started state", platformv1.JobRequestReviewApproved, platformv1.JobRequestStarted),
+			Entry("when the jobRequestReview was Accepted and the JobRequest is now in a Failed state", platformv1.JobRequestReviewApproved, platformv1.JobRequestFailed),
+			Entry("when the jobRequestReview was Accepted and the JobRequest is now in a Complete state", platformv1.JobRequestReviewApproved, platformv1.JobRequestComplete),
+		)
 	})
 })
