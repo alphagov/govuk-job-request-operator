@@ -90,6 +90,26 @@ type JobRequest struct {
 	Status JobRequestStatus `json:"status,omitzero"`
 }
 
+func (jr *JobRequest) WasReviewedBy(review *JobRequestReview) bool {
+	return jr.Status.ReviewName == review.Name
+}
+
+func (jr *JobRequest) HasBeenReviewed() bool {
+	if jr.Status.State == "" || jr.Status.State == JobRequestPending || jr.Status.State == JobRequestMalformed {
+		return false
+	} else {
+		return true
+	}
+}
+
+func (jr *JobRequest) HasBeenRejected() bool {
+	return jr.Status.State == JobRequestRejected
+}
+
+func (jr *JobRequest) HasBeenApproved() bool {
+	return jr.HasBeenReviewed() && !jr.HasBeenRejected()
+}
+
 // +kubebuilder:object:root=true
 
 // JobRequestList contains a list of JobRequest
