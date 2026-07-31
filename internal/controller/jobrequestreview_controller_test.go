@@ -25,6 +25,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -261,7 +262,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 
 		DescribeTable("when the JobRequest has already been reviewed by another JobRequestReview",
 			func(previousJobRequestReviewState platformv1.JobRequestReviewState, jobRequestState platformv1.JobRequestState) {
-				// Create the JobRequest and the previous JobRequestReview
+				By("Creating the Jobquest and the prior JobRequestReview")
 				previousJobRequestReviewName := "previous-job-request-review"
 				previousJobRequestReviewNamespaceName := types.NamespacedName{
 					Name:      previousJobRequestReviewName,
@@ -271,7 +272,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 				previousJobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, previousJobRequestReviewName, string(previousJobRequestReviewState))
 				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
 
-				// Allow the JobRequestReview to be reconcilled
+				By("Allowing the JobRequest to be reconciled with the prior JobRequestReview")
 				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 				jobRequest.Status = platformv1.JobRequestStatus{
 					State: platformv1.JobRequestPending,
@@ -282,12 +283,11 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 				Eventually(func(g Gomega) {
 					g.Expect(k8sClient.Get(ctx, previousJobRequestReviewNamespaceName, previousJobRequestReview)).To(Succeed())
 					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-					// We aren't running reconcilliation for the JobRequest so we can only wait for its state to get into the state the Review had
 					g.Expect(string(jobRequest.Status.State)).To(Equal(string(previousJobRequestReviewState)))
 					g.Expect(previousJobRequestReview.Status.State).To(Equal(previousJobRequestReviewState))
 				}).Should(Succeed())
 
-				// Now set the JobRequst has been approved/rejeected set the state to the state under test
+				By(fmt.Sprintf("Setting the State of the JobRequest to %s", jobRequestState))
 				jobRequest.Status.State = jobRequestState
 				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
 
@@ -296,7 +296,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 					g.Expect(jobRequest.Status.State).To(Equal(jobRequestState))
 				}).Should(Succeed())
 
-				// Clear all the events
+				By(fmt.Sprintf("Clearing all the Events in the %s namespace", reviewNamespaceName))
 				Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, &client.DeleteAllOfOptions{
 					DeleteOptions: client.DeleteOptions{
 						GracePeriodSeconds: new(int64(0)),
@@ -309,13 +309,13 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 
 				jobRequestVersion := jobRequest.ResourceVersion
 
-				// Create the new JobRequestReview
+				By("Creating a new JobRequestReview which reviews the previous reviewed JobRequest")
 				jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, string(platformv1.JobRequestReviewRejected))
 				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 				eventList := &eventsv1.EventList{}
 
-				// The JobRequest state and version should not change, and the JopRequestReview should go into the Conflict state
+				By("Waiting for the new JobRequestReview to go into a Conflict state")
 				Eventually(func(g Gomega) {
 					g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
 					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
