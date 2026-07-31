@@ -40,7 +40,7 @@ type JobRequestReviewSpec struct {
 
 // JobRequestReviewStatus defines the observed state of JobRequestReview.
 type JobRequestReviewStatus struct {
-	// +kubebuilder:validation:Enum=Approved;Rejected;JobRequestMalformed;JobRequestNotFound
+	// +kubebuilder:validation:Enum=Approved;Rejected;JobRequestMalformed;JobRequestNotFound;Conflict
 	State JobRequestReviewState `json:"state,omitempty"`
 }
 
@@ -85,4 +85,5 @@ const (
 	JobRequestReviewRejected  JobRequestReviewState = "Rejected"
 	JobRequestReviewMalformed JobRequestReviewState = "JobRequestMalformed"
 	JobRequestReviewNotFound  JobRequestReviewState = "JobRequestNotFound"
+	JobRequestReviewConflict  JobRequestReviewState = "Conflict"
 )

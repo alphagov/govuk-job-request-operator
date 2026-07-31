@@ -76,6 +76,7 @@ spec:
                 - Rejected
                 - JobRequestMalformed
                 - JobRequestNotFound
+                - Conflict
                 type: string
             type: object
         required:
