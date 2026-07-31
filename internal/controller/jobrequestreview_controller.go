@@ -26,6 +26,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -61,6 +62,14 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if jobRequestReview.Status.State != "" {
+		r.Log.Info(
+			fmt.Sprintf(
+				"JobRequestReview %s presented for reconcilliation, but it already has State %s, no further reconcilliation will happen",
+				jobRequestReview.Name,
+				jobRequestReview.Status.State,
+			),
+		)
+
 		return ctrl.Result{}, nil
 	}
 
@@ -79,7 +88,7 @@ func (r *JobRequestReviewReconciler) getJobRequestReview(ctx context.Context, na
 		if apierrors.IsNotFound(err) {
 			errorLogMessage = "JobRequestReview resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation"
 		} else {
-			errorLogMessage = "Failed to deserialize JobRequest. Ignoring and ending reconciliation"
+			errorLogMessage = "Failed to deserialize JobRequestReview. Ignoring and ending reconciliation"
 		}
 		r.Log.Error(err, errorLogMessage)
 		return false
@@ -95,6 +104,11 @@ func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobReque
 	}
 
 	if err := r.ApiServerClient.List(ctx, requestList, opts...); err != nil || len(requestList.Items) == 0 {
+		// State is already not found, no need to log anymore
+		if jobRequestReview.Status.State == platformv1.JobRequestReviewNotFound {
+			return &ctrl.Result{}, nil
+		}
+
 		jobRequestReview.Status.State = platformv1.JobRequestReviewNotFound
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewNotFound), "None", "JobRequest could not be found")
 		err := r.CacheClient.Status().Update(ctx, jobRequestReview)
