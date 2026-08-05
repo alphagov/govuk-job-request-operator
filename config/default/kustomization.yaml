@@ -15,6 +15,7 @@ namePrefix: govuk-job-request-operator-
 #    someName: someValue
 
 resources:
+- ../extras
 - ../crd
 - ../rbac
 - ../manager

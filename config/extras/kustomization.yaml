@@ -1,0 +1,6 @@
+---
+resources:
+- reviewed-by-mutation-binding.yaml
+- reviewed-by-mutation.yaml
+- requested-by-mutation-binding.yaml
+- requested-by-mutation.yaml
