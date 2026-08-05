@@ -21,7 +21,7 @@ spec:
           Object{
             metadata: Object.metadata{
               annotations: {
-                "platform.publishing.service.gov.uk/requested-by": request.userInfo.username.split("/")[1].split("-")[0]
+                "platform.publishing.service.gov.uk/requested-by": request.userInfo.username
               }
             }
           }
