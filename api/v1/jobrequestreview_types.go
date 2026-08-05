@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package v1
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -67,6 +69,16 @@ type JobRequestReview struct {
 	// status defines the observed state of JobRequestReview
 	// +optional
 	Status JobRequestReviewStatus `json:"status,omitzero"`
+}
+
+func (jrr *JobRequestReview) GetReviewedBy() (string, error) {
+	requestedBy, ok := jrr.Annotations["platform.publishing.service.gov.uk/reviewed-by"]
+
+	if !ok {
+		return "", fmt.Errorf("JobRequestReview %s does not include the reviewed-by annotation", jrr.Name)
+	}
+
+	return requestedBy, nil
 }
 
 // +kubebuilder:object:root=true

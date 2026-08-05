@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package v1
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -108,6 +110,16 @@ func (jr *JobRequest) HasBeenRejected() bool {
 
 func (jr *JobRequest) HasBeenApproved() bool {
 	return jr.HasBeenReviewed() && !jr.HasBeenRejected()
+}
+
+func (jr *JobRequest) GetRequestedBy() (string, error) {
+	requestedBy, ok := jr.Annotations["platform.publishing.service.gov.uk/requested-by"]
+
+	if !ok {
+		return "", fmt.Errorf("JobRequest %s does not include the requested-by annotation", jr.Name)
+	}
+
+	return requestedBy, nil
 }
 
 // +kubebuilder:object:root=true
