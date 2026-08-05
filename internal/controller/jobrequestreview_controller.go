@@ -73,12 +73,29 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
+	if !r.validateReviewedByAnnotation(ctx, jobRequestReview) {
+		return ctrl.Result{}, nil
+	}
+
 	resourceResult, jobRequest := r.getJobRequest(ctx, jobRequestReview)
 	if resourceResult != nil {
 		return *resourceResult, nil
 	}
 
 	return r.handleState(ctx, jobRequest, jobRequestReview)
+}
+
+func (r *JobRequestReviewReconciler) validateReviewedByAnnotation(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) bool {
+	_, err := jobRequestReview.GetReviewedBy()
+
+	if err != nil {
+		r.Log.Error(err, "Missing reviewed-by field")
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		return false
+	}
+
+	return true
 }
 
 func (r *JobRequestReviewReconciler) getJobRequestReview(ctx context.Context, namespaceName client.ObjectKey, jobRequestReview *platformv1.JobRequestReview) bool {
