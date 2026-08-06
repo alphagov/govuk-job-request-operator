@@ -39,7 +39,6 @@ jobs:
       run: |
         kubebuilder alpha update \
           --force \
-          --push \
           --restore-path .github/workflows
 
     - name: Create pull request
@@ -64,6 +63,8 @@ jobs:
         COMMIT_TITLE=$(git log -1 --format="%s")
         COMMIT_BODY="[Release notes](https://github.com/kubernetes-sigs/kubebuilder/releases/tag/$CLI_VERSION)"
         git commit --amend -m "$COMMIT_TITLE" -m "$COMMIT_BODY"
+
+        git push origin "$KUBEBUILDER_BRANCH"
 
         gh pr create \
           --base main \
