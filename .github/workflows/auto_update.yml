@@ -1,0 +1,72 @@
+name: Auto Update
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron:  '0 7 * * 1-5'
+
+jobs:
+  auto-update:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Set up Go
+      uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+      with:
+        go-version-file: go.mod
+
+    - name: Install Kubebuilder
+      run: |
+        curl -L -o kubebuilder "https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)"
+        chmod +x kubebuilder
+        sudo mv kubebuilder /usr/local/bin/
+        kubebuilder version
+
+    - name: Run kubebuilder alpha update
+      run: |
+        kubebuilder alpha update \
+          --force \
+          --push \
+          --restore-path .github/workflows
+
+    - name: Create pull request
+      run: |
+        KUBEBUILDER_BRANCH=$(git branch --list "*kubebuilder*" | tr -d '* ')
+
+        if [ -z "$KUBEBUILDER_BRANCH" ]; then
+          echo "No changes detected."
+          exit 0
+        fi
+
+        PR_LIST_SIZE=$(gh pr list --head "$KUBEBUILDER_BRANCH" --json title --jq length)
+
+        if [ "$PR_LIST_SIZE" -gt 0 ]; then
+          echo "Pull request already exists for branch $KUBEBUILDER_BRANCH."
+          exit 0
+        fi
+
+        git checkout "$KUBEBUILDER_BRANCH"
+
+        CLI_VERSION=$(grep "cliVersion:" PROJECT | awk '{print $2}')
+        COMMIT_TITLE=$(git log -1 --format="%s")
+        COMMIT_BODY="[Release notes](https://github.com/kubernetes-sigs/kubebuilder/releases/tag/$CLI_VERSION)"
+        git commit --amend -m "$COMMIT_TITLE" -m "$COMMIT_BODY"
+
+        gh pr create \
+          --base main \
+          --head "$KUBEBUILDER_BRANCH" \
+          --label "dependencies,kubebuilder" \
+          --fill
