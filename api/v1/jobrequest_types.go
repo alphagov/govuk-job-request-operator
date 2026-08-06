@@ -113,7 +113,7 @@ func (jr *JobRequest) HasBeenApproved() bool {
 }
 
 func (jr *JobRequest) GetRequestedBy() (string, error) {
-	requestedBy, ok := jr.Annotations["platform.publishing.service.gov.uk/requested-by"]
+	requestedBy, ok := jr.Annotations[JobRequestRequestedByAnnotation]
 
 	if !ok {
 		return "", fmt.Errorf("JobRequest %s does not include the requested-by annotation", jr.Name)
@@ -134,11 +134,12 @@ type JobRequestList struct {
 type JobRequestState string
 
 const (
-	JobRequestPending   JobRequestState = "Pending"
-	JobRequestApproved  JobRequestState = "Approved"
-	JobRequestRejected  JobRequestState = "Rejected"
-	JobRequestStarted   JobRequestState = "Started"
-	JobRequestComplete  JobRequestState = "Complete"
-	JobRequestFailed    JobRequestState = "Failed"
-	JobRequestMalformed JobRequestState = "Malformed"
+	JobRequestPending               JobRequestState = "Pending"
+	JobRequestApproved              JobRequestState = "Approved"
+	JobRequestRejected              JobRequestState = "Rejected"
+	JobRequestStarted               JobRequestState = "Started"
+	JobRequestComplete              JobRequestState = "Complete"
+	JobRequestFailed                JobRequestState = "Failed"
+	JobRequestMalformed             JobRequestState = "Malformed"
+	JobRequestRequestedByAnnotation string          = "platform.publishing.service.gov.uk/requested-by"
 )

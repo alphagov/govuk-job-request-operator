@@ -72,7 +72,7 @@ type JobRequestReview struct {
 }
 
 func (jrr *JobRequestReview) GetReviewedBy() (string, error) {
-	requestedBy, ok := jrr.Annotations["platform.publishing.service.gov.uk/reviewed-by"]
+	requestedBy, ok := jrr.Annotations[JobRequestReviewReviewedByAnnotation]
 
 	if !ok {
 		return "", fmt.Errorf("JobRequestReview %s does not include the reviewed-by annotation", jrr.Name)
@@ -93,9 +93,10 @@ type JobRequestReviewList struct {
 type JobRequestReviewState string
 
 const (
-	JobRequestReviewApproved  JobRequestReviewState = "Approved"
-	JobRequestReviewRejected  JobRequestReviewState = "Rejected"
-	JobRequestReviewMalformed JobRequestReviewState = "JobRequestMalformed"
-	JobRequestReviewNotFound  JobRequestReviewState = "JobRequestNotFound"
-	JobRequestReviewConflict  JobRequestReviewState = "Conflict"
+	JobRequestReviewApproved             JobRequestReviewState = "Approved"
+	JobRequestReviewRejected             JobRequestReviewState = "Rejected"
+	JobRequestReviewMalformed            JobRequestReviewState = "JobRequestMalformed"
+	JobRequestReviewNotFound             JobRequestReviewState = "JobRequestNotFound"
+	JobRequestReviewConflict             JobRequestReviewState = "Conflict"
+	JobRequestReviewReviewedByAnnotation string                = "platform.publishing.service.gov.uk/reviewed-by"
 )
