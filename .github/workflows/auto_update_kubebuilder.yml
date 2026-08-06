@@ -1,4 +1,4 @@
-name: Auto Update
+name: Auto Update Kubebuilder
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
     - cron:  '0 7 * * 1-5'
 
 jobs:
-  auto-update:
+  auto-update-kubebuilder:
     permissions:
       contents: write
       pull-requests: write
