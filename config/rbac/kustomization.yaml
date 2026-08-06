@@ -25,4 +25,6 @@ resources:
 - jobrequest_admin_role.yaml
 - jobrequest_editor_role.yaml
 - jobrequest_viewer_role.yaml
-
+- jobrequestreview_admin_role.yaml
+- jobrequestreview_editor_role.yaml
+- jobrequestreview_viewer_role.yaml

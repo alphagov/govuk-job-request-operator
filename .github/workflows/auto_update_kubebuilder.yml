@@ -59,6 +59,10 @@ jobs:
 
         git checkout "$KUBEBUILDER_BRANCH"
 
+        git rm -r dist
+        git rm -r config/samples
+        git checkout main -- .github/workflows
+
         CLI_VERSION=$(grep "cliVersion:" PROJECT | awk '{print $2}')
         COMMIT_TITLE=$(git log -1 --format="%s")
         COMMIT_BODY="[Release notes](https://github.com/kubernetes-sigs/kubebuilder/releases/tag/$CLI_VERSION)"
