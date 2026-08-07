@@ -1,0 +1,27 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicy
+metadata:
+  name: requested-by-mutation
+spec:
+  matchConstraints:
+    resourceRules:
+      - apiGroups: ["platform.publishing.service.gov.uk"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources:
+          - jobrequests
+  matchConditions: []
+  failurePolicy: Fail
+  reinvocationPolicy: IfNeeded
+  mutations:
+    - patchType: "ApplyConfiguration"
+      applyConfiguration:
+        expression: >
+          Object{
+            metadata: Object.metadata{
+              annotations: {
+                "platform.publishing.service.gov.uk/requested-by": request.userInfo.username
+              }
+            }
+          }

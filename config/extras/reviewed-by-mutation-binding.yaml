@@ -1,0 +1,8 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingAdmissionPolicyBinding
+metadata:
+  name: reviewed-by-mutation-binding
+spec:
+  policyName: reviewed-by-mutation
+  matchResources: {}

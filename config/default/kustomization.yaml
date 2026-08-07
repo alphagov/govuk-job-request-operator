@@ -15,6 +15,7 @@ namePrefix: govuk-job-request-operator-
 #    someName: someValue
 
 resources:
+- ../extras
 - ../crd
 - ../rbac
 - ../manager
@@ -232,3 +233,6 @@ patches:
 #     fieldPath: .metadata.name
 #   targets: # Do not remove or uncomment the following scaffold marker; required to generate code for target CRD.
 # +kubebuilder:scaffold:crdkustomizecainjectionname
+
+configurations:
+  - kustomize-mutating-admission-policy-prefix-config.yaml

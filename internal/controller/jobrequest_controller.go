@@ -26,6 +26,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -72,6 +73,10 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
+	if !r.validateRequestedByAnnotation(ctx, jobRequest) {
+		return ctrl.Result{}, nil
+	}
+
 	resourceResult, resourceList := r.getTargetResource(ctx, jobRequest)
 	if resourceResult != nil {
 		return *resourceResult, nil
@@ -85,6 +90,19 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	jobRequestState := r.calculateState(ctx, jobRequest)
 
 	return r.handleState(ctx, jobRequestState, jobRequest, jobTemplate, req.NamespacedName)
+}
+
+func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context, jobRequest *platformv1.JobRequest) bool {
+	_, err := jobRequest.GetRequestedBy()
+
+	if err != nil {
+		r.Log.Error(err, "Missing requested-by field")
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
+		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
+		return false
+	}
+
+	return true
 }
 
 func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName client.ObjectKey, jobRequest *platformv1.JobRequest) bool {
@@ -276,7 +294,7 @@ func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platfor
 	jobRequest.Status.State = state
 	err := r.CacheClient.Status().Update(ctx, jobRequest)
 	if err != nil {
-		r.Log.Error(err, "Failed to update status of JobRequest")
+		r.Log.Error(err, fmt.Sprintf("Failed to update status of JobRequest %s to %s", jobRequest.Name, state))
 	}
 }
 

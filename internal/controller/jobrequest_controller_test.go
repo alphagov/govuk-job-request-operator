@@ -538,5 +538,30 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestMalformed))
 			}).Should(Succeed())
 		})
+
+		It("should go to Malformed state when the JobRequest has no requested-by annotation", func() {
+			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
+			delete(jobRequest.Annotations, "platform.publishing.service.gov.uk/requested-by")
+
+			targetResource := deploymentBuilder(jobRequestName, appNamespaceName)
+
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+			eventList := &eventsv1.EventList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestMalformed))
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestMalformed)))
+			}).Should(Succeed())
+
+			jobList := &batch.JobList{}
+
+			Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
+			Expect(jobList.Items).To(BeEmpty())
+		})
 	})
 })

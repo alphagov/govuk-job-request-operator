@@ -31,6 +31,30 @@ func jobRequestReview(jobRequestName string, decision JobRequestReviewState) *Jo
 }
 
 var _ = Describe("JobRequest", Ordered, func() {
+	Describe("GetRequestedBy", func() {
+		It("Returns the annotation value and a nil error if the annotation is set", func() {
+			jobRequest := &JobRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						"platform.publishing.service.gov.uk/requested-by": "joe.blogs",
+					},
+				},
+			}
+
+			requestedBy, err := jobRequest.GetRequestedBy()
+			Expect(requestedBy).To(Equal("joe.blogs"))
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Returns an empty string and an error if the annotation is not set", func() {
+			jobRequest := &JobRequest{}
+
+			requestedBy, err := jobRequest.GetRequestedBy()
+			Expect(requestedBy).To(Equal(""))
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 	Describe("WasReviewedBy", func() {
 		It("returns false if the JobRequest has no state yet", func() {
 			jobRequest := &JobRequest{}

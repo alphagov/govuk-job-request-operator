@@ -260,6 +260,33 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			}).Should(Succeed())
 		})
 
+		It("should go to Malformed state when the JobRequestReview has no reviewed-by annotation", func() {
+			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Rejected")
+			delete(jobRequestReview.Annotations, "platform.publishing.service.gov.uk/reviewed-by")
+
+			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+			jobRequestStatus := platformv1.JobRequestStatus{
+				State: platformv1.JobRequestPending,
+			}
+
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+			jobRequest.Status = jobRequestStatus
+			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+
+			eventList := &eventsv1.EventList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewMalformed))
+				g.Expect(jobRequest.HasBeenReviewed()).To(BeFalse())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewMalformed)))
+			}).Should(Succeed())
+		})
+
 		DescribeTable("when the JobRequest has already been reviewed by another JobRequestReview",
 			func(previousJobRequestReviewState platformv1.JobRequestReviewState, jobRequestState platformv1.JobRequestState) {
 				By("Creating the Jobquest and the prior JobRequestReview")

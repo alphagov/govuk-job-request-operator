@@ -207,6 +207,7 @@ $(LOCALBIN):
 ## Tool Binaries
 KUBECTL ?= kubectl
 KIND ?= kind
+KUBEBUILDER ?= kubebuilder
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
@@ -293,6 +294,15 @@ HELM_CHART_DIR ?= dist/chart
 ## Additional arguments to pass to helm commands
 HELM_EXTRA_ARGS ?=
 
+.PHONY: build-helm-chart
+build-helm-chart:
+	@command -v $(KUBEBUILDER) >/dev/null 2>&1 || { \
+		echo "Kubebuilder is not installed. Please install Kubebuilder manually."; \
+		exit 1; \
+	}
+
+	$(KUBEBUILDER) edit --plugins helm/v2-alpha --force
+
 .PHONY: install-helm
 install-helm: ## Install the latest version of Helm.
 	@command -v $(HELM) >/dev/null 2>&1 || { \
@@ -301,7 +311,7 @@ install-helm: ## Install the latest version of Helm.
 	}
 
 .PHONY: helm-deploy
-helm-deploy: install-helm ## Deploy manager to the K8s cluster via Helm. Specify an image with IMG.
+helm-deploy: install-helm build-helm-chart ## Deploy manager to the K8s cluster via Helm. Specify an image with IMG.
 	$(HELM) upgrade --install $(HELM_RELEASE) $(HELM_CHART_DIR) \
 		--namespace $(HELM_NAMESPACE) \
 		--create-namespace \

@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package v1
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -110,6 +112,16 @@ func (jr *JobRequest) HasBeenApproved() bool {
 	return jr.HasBeenReviewed() && !jr.HasBeenRejected()
 }
 
+func (jr *JobRequest) GetRequestedBy() (string, error) {
+	requestedBy, ok := jr.Annotations[JobRequestRequestedByAnnotation]
+
+	if !ok {
+		return "", fmt.Errorf("JobRequest %s does not include the requested-by annotation", jr.Name)
+	}
+
+	return requestedBy, nil
+}
+
 // +kubebuilder:object:root=true
 
 // JobRequestList contains a list of JobRequest
@@ -122,11 +134,12 @@ type JobRequestList struct {
 type JobRequestState string
 
 const (
-	JobRequestPending   JobRequestState = "Pending"
-	JobRequestApproved  JobRequestState = "Approved"
-	JobRequestRejected  JobRequestState = "Rejected"
-	JobRequestStarted   JobRequestState = "Started"
-	JobRequestComplete  JobRequestState = "Complete"
-	JobRequestFailed    JobRequestState = "Failed"
-	JobRequestMalformed JobRequestState = "Malformed"
+	JobRequestPending               JobRequestState = "Pending"
+	JobRequestApproved              JobRequestState = "Approved"
+	JobRequestRejected              JobRequestState = "Rejected"
+	JobRequestStarted               JobRequestState = "Started"
+	JobRequestComplete              JobRequestState = "Complete"
+	JobRequestFailed                JobRequestState = "Failed"
+	JobRequestMalformed             JobRequestState = "Malformed"
+	JobRequestRequestedByAnnotation string          = "platform.publishing.service.gov.uk/requested-by"
 )

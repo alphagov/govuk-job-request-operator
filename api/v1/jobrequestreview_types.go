@@ -24,6 +24,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package v1
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -69,6 +71,16 @@ type JobRequestReview struct {
 	Status JobRequestReviewStatus `json:"status,omitzero"`
 }
 
+func (jrr *JobRequestReview) GetReviewedBy() (string, error) {
+	requestedBy, ok := jrr.Annotations[JobRequestReviewReviewedByAnnotation]
+
+	if !ok {
+		return "", fmt.Errorf("JobRequestReview %s does not include the reviewed-by annotation", jrr.Name)
+	}
+
+	return requestedBy, nil
+}
+
 // +kubebuilder:object:root=true
 
 // JobRequestReviewList contains a list of JobRequestReview
@@ -81,9 +93,10 @@ type JobRequestReviewList struct {
 type JobRequestReviewState string
 
 const (
-	JobRequestReviewApproved  JobRequestReviewState = "Approved"
-	JobRequestReviewRejected  JobRequestReviewState = "Rejected"
-	JobRequestReviewMalformed JobRequestReviewState = "JobRequestMalformed"
-	JobRequestReviewNotFound  JobRequestReviewState = "JobRequestNotFound"
-	JobRequestReviewConflict  JobRequestReviewState = "Conflict"
+	JobRequestReviewApproved             JobRequestReviewState = "Approved"
+	JobRequestReviewRejected             JobRequestReviewState = "Rejected"
+	JobRequestReviewMalformed            JobRequestReviewState = "JobRequestMalformed"
+	JobRequestReviewNotFound             JobRequestReviewState = "JobRequestNotFound"
+	JobRequestReviewConflict             JobRequestReviewState = "Conflict"
+	JobRequestReviewReviewedByAnnotation string                = "platform.publishing.service.gov.uk/reviewed-by"
 )
