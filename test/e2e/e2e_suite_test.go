@@ -41,6 +41,8 @@ import (
 var (
 	// managerImage is the manager image to be built and loaded for testing.
 	managerImage = "ghcr.io/alphagov/govuk/govuk-job-request-operator:v0.0.1"
+	// kindCluster is the name of the Kind cluster to be used for testing.
+	kindCluster = utils.DefaultKindCluster
 	// shouldCleanupCertManager tracks whether CertManager was installed by this suite.
 	shouldCleanupCertManager = false
 	// govukReplatformTestAppImage is the image used for testing
@@ -55,9 +57,14 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	By("building the manager image")
-	cmd := exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", managerImage))
+	By("creating a Kind cluster for e2e tests")
+	cmd := exec.Command("kind", "create", "cluster", "--name", kindCluster)
 	_, err := utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create Kind cluster")
+
+	By("building the manager image")
+	cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", managerImage))
+	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager image")
 
 	By("loading the manager image on Kind")
@@ -74,7 +81,10 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	teardownCertManager()
+	By("deleting the Kind cluster")
+	cmd := exec.Command("kind", "delete", "cluster", "--name", kindCluster)
+	_, err := utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to delete Kind cluster")
 })
 
 // setupCertManager installs CertManager if needed for webhook tests.
@@ -96,16 +106,4 @@ func setupCertManager() {
 
 	By("installing CertManager")
 	Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
-}
-
-// teardownCertManager uninstalls CertManager if it was installed by setupCertManager.
-// This ensures we only remove what we installed.
-func teardownCertManager() {
-	if !shouldCleanupCertManager {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Skipping CertManager cleanup (not installed by this suite)\n")
-		return
-	}
-
-	By("uninstalling CertManager")
-	utils.UninstallCertManager()
 }
