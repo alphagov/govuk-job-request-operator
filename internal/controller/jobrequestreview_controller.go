@@ -86,10 +86,18 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 func (r *JobRequestReviewReconciler) validateReviewedByAnnotation(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) bool {
-	_, err := jobRequestReview.GetReviewedBy()
+	reviewedBy, err := jobRequestReview.GetReviewedBy()
 
 	if err != nil {
 		r.Log.Error(err, "Missing reviewed-by field")
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		return false
+	}
+
+	_, err = platformv1.ParseUsernameFromARN(reviewedBy)
+	if err != nil {
+		r.Log.Error(err, "Invalid reviewed-by field")
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
 		return false
