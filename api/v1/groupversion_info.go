@@ -41,7 +41,14 @@ var (
 	GroupVersion = SchemeGroupVersion
 
 	// SchemeBuilder is used to add go types to the GroupVersionKind scheme.
+<<<<<<< HEAD
+	SchemeBuilder = runtime.NewSchemeBuilder(func(scheme *runtime.Scheme) error {
+		metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+		return nil
+	})
+=======
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
+>>>>>>> tmp-original-10-08-26-11-02
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme

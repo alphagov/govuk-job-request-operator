@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // JobRequestReviewSpec defines the desired state of JobRequestReview
@@ -90,6 +91,14 @@ type JobRequestReviewList struct {
 	Items           []JobRequestReview `json:"items"`
 }
 
+<<<<<<< HEAD
+func init() {
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(SchemeGroupVersion, &JobRequestReview{}, &JobRequestReviewList{})
+		return nil
+	})
+}
+=======
 type JobRequestReviewState string
 
 const (
@@ -100,3 +109,4 @@ const (
 	JobRequestReviewConflict             JobRequestReviewState = "Conflict"
 	JobRequestReviewReviewedByAnnotation string                = "platform.publishing.service.gov.uk/reviewed-by"
 )
+>>>>>>> tmp-original-10-08-26-11-02

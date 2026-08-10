@@ -28,6 +28,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package v1
 
 import (
+<<<<<<< HEAD
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+=======
+>>>>>>> tmp-original-10-08-26-11-02
 	"k8s.io/apimachinery/pkg/runtime"
 )
 

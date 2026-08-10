@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 type JobRequestPodSpecFrom struct {
@@ -131,6 +132,14 @@ type JobRequestList struct {
 	Items           []JobRequest `json:"items"`
 }
 
+<<<<<<< HEAD
+func init() {
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(SchemeGroupVersion, &JobRequest{}, &JobRequestList{})
+		return nil
+	})
+}
+=======
 type JobRequestState string
 
 const (
@@ -143,3 +152,4 @@ const (
 	JobRequestMalformed             JobRequestState = "Malformed"
 	JobRequestRequestedByAnnotation string          = "platform.publishing.service.gov.uk/requested-by"
 )
+>>>>>>> tmp-original-10-08-26-11-02
