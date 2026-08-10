@@ -21,12 +21,12 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+//nolint:noctx
 package utils
 
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -41,7 +41,7 @@ const (
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
 
 	defaultKindBinary  = "kind"
-	defaultKindCluster = "kind"
+	DefaultKindCluster = "govuk-job-request-operator-test-e2e"
 )
 
 func warnError(err error) {
@@ -84,8 +84,7 @@ func RetrieveFixtureFilePath(fixture string) (string, error) {
 // UninstallCertManager uninstalls the cert manager
 func UninstallCertManager() {
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	backgroundContext := context.Background()
-	cmd := exec.CommandContext(backgroundContext, "kubectl", "delete", "-f", url) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
+	cmd := exec.Command("kubectl", "delete", "-f", url) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
 	if _, err := Run(cmd); err != nil {
 		warnError(err)
 	}
@@ -96,7 +95,7 @@ func UninstallCertManager() {
 		"cert-manager-controller",
 	}
 	for _, lease := range kubeSystemLeases {
-		cmd := exec.CommandContext(backgroundContext, "kubectl", "delete", "lease", lease,
+		cmd := exec.Command("kubectl", "delete", "lease", lease,
 			"-n", "kube-system", "--ignore-not-found", "--force", "--grace-period=0") //gosec:disable G204 -- We intentionally want to exec a sub process with a var
 		if _, err := Run(cmd); err != nil {
 			warnError(err)
@@ -106,15 +105,14 @@ func UninstallCertManager() {
 
 // InstallCertManager installs the cert manager bundle.
 func InstallCertManager() error {
-	backgroundContext := context.Background()
 	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.CommandContext(backgroundContext, "kubectl", "apply", "-f", url) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
+	cmd := exec.Command("kubectl", "apply", "-f", url) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
 	if _, err := Run(cmd); err != nil {
 		return err
 	}
 	// Wait for cert-manager-webhook to be ready, which can take time if cert-manager
 	// was re-installed after uninstalling on a cluster.
-	cmd = exec.CommandContext(backgroundContext, "kubectl", "wait", "deployment.apps/cert-manager-webhook",
+	cmd = exec.Command("kubectl", "wait", "deployment.apps/cert-manager-webhook",
 		"--for", "condition=Available",
 		"--namespace", "cert-manager",
 		"--timeout", "5m",
@@ -138,8 +136,7 @@ func IsCertManagerCRDsInstalled() bool {
 	}
 
 	// Execute the kubectl command to get all CRDs
-	backgroundContext := context.Background()
-	cmd := exec.CommandContext(backgroundContext, "kubectl", "get", "crds") //gosec:disable G204 -- We intentionally want to exec a sub process
+	cmd := exec.Command("kubectl", "get", "crds") //gosec:disable G204 -- We intentionally want to exec a sub process
 	output, err := Run(cmd)
 	if err != nil {
 		return false
@@ -160,17 +157,10 @@ func IsCertManagerCRDsInstalled() bool {
 
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
 func LoadImageToKindClusterWithName(name string) error {
-	cluster := defaultKindCluster
-	if v, ok := os.LookupEnv("KIND_CLUSTER"); ok {
-		cluster = v
-	}
+	cluster := DefaultKindCluster
 	kindOptions := []string{"load", "docker-image", name, "--name", cluster}
 	kindBinary := defaultKindBinary
-	if v, ok := os.LookupEnv("KIND"); ok {
-		kindBinary = v
-	}
-	backgroundContext := context.Background()
-	cmd := exec.CommandContext(backgroundContext, kindBinary, kindOptions...) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
+	cmd := exec.Command(kindBinary, kindOptions...) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
 	_, err := Run(cmd)
 	return err
 }
