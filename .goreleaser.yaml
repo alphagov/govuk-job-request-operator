@@ -49,7 +49,7 @@ release:
 dockers_v2:
   - dockerfile: goreleaser.Dockerfile
     images:
-      - "ghcr.io/alphagov/govuk-job-request-operator"
+      - "ghcr.io/alphagov/govuk/govuk-job-request-operator"
     tags:
       - "v{{ .Version }}"
     platforms:
