@@ -61,6 +61,7 @@ jobs:
 
         git rm -r dist
         git rm -r config/samples
+        git rm -r .github/workflows
         git checkout main -- .github/workflows
 
         CLI_VERSION=$(grep "cliVersion:" PROJECT | awk '{print $2}')
