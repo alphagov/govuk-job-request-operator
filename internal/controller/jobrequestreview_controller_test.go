@@ -332,6 +332,52 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
 		)
 
+		DescribeTable("the JobRequestReview should go into Conflict state without reviewing the JobRequest if the reviewer is the same as the requester",
+			func(requester string, reviewer string) {
+				By("Creating the JobRequest")
+				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+				jobRequest.Annotations[platformv1.JobRequestRequestedByAnnotation] = requester
+
+				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+				jobRequest.Status = platformv1.JobRequestStatus{
+					State: platformv1.JobRequestPending,
+				}
+				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+				By("Creating the JobRequestReview")
+				jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, string(platformv1.JobRequestReviewRejected))
+				jobRequestReview.Annotations[platformv1.JobRequestReviewReviewedByAnnotation] = reviewer
+				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
+					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+					g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewConflict))
+					g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestPending))
+				}).Should(Succeed())
+			},
+			Entry(
+				"with identical gds-users reviewer and requester",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/test-platformengineer",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/some-session-name",
+			),
+			Entry(
+				"with same gds-users user but different role",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/test-platformengineer",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-developer/some-session-name",
+			),
+			Entry(
+				"with identical EntraID reviewer and requester",
+				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+			),
+			Entry(
+				"with same EntraID user but different role",
+				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789:assumed-role/Administrator/joe.blogs@dsit.gov.uk",
+			),
+		)
+
 		DescribeTable("when the JobRequest has already been reviewed by another JobRequestReview",
 			func(previousJobRequestReviewState platformv1.JobRequestReviewState, jobRequestState platformv1.JobRequestState) {
 				By("Creating the Jobquest and the prior JobRequestReview")

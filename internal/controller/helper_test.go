@@ -38,7 +38,7 @@ func jobRequestReviewBuilder(jobRequestName, resourceNamespace, jobRequestReview
 			Name:      jobRequestReviewName,
 			Namespace: resourceNamespace,
 			Annotations: map[string]string{
-				"platform.publishing.service.gov.uk/reviewed-by": "arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer",
+				"platform.publishing.service.gov.uk/reviewed-by": "arn:aws:sts::123456789:assumed-role/other.name-platformengineer/environment-platformengineer",
 			},
 		},
 		Spec: platformv1.JobRequestReviewSpec{
