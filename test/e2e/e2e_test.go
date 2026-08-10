@@ -86,6 +86,25 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
+		By("waiting for JobRequest CRD to become established")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "crd", "jobrequests.platform.publishing.service.gov.uk",
+				"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
+
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).To(Equal("True"), "JobRequest CRD not established")
+		}).Should(Succeed())
+
+		By("waiting for JobRequestReview CRD to become established")
+		Eventually(func(g Gomega) {
+			cmd := exec.Command("kubectl", "get", "crd", "jobrequestreviews.platform.publishing.service.gov.uk",
+				"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).To(Equal("True"), "JobRequestReview CRD not established")
+		}).Should(Succeed())
+
 		By("deploying the controller-manager")
 		cmd = exec.Command("make", "deploy", fmt.Sprintf("IMG=%s", managerImage))
 		_, err = utils.Run(cmd)
