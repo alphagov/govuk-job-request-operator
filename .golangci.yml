@@ -36,3 +36,5 @@ linters:
       dot-import-whitelist:
         - github.com/onsi/ginkgo/v2
         - github.com/onsi/gomega
+    goconst:
+      ignore-tests: true
