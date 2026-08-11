@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package e2e
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -133,6 +134,8 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	})
 
 	BeforeEach(func() {
+		SwitchToKubernetesAdminUser(context.Background())
+
 		By("clean up JobReviews")
 		cmd := exec.Command("kubectl", "delete", "jrr", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
@@ -151,6 +154,8 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	})
 
 	AfterEach(func() {
+		SwitchToKubernetesAdminUser(context.Background())
+
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
 			By("Fetching controller manager pod logs")
