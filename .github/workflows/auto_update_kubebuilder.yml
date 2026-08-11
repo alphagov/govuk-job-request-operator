@@ -61,12 +61,13 @@ jobs:
 
         git rm -r dist
         git rm -r config/samples
+        git rm -r AGENTS.md
         git rm -r .github/workflows
         git checkout main -- .github/workflows
 
         CLI_VERSION=$(grep "cliVersion:" PROJECT | awk '{print $2}')
         COMMIT_TITLE=$(git log -1 --format="%s")
-        COMMIT_BODY="[Release notes](https://github.com/kubernetes-sigs/kubebuilder/releases/tag/$CLI_VERSION)"
+        COMMIT_BODY="[Release notes](https://github.com/kubernetes-sigs/kubebuilder/releases/tag/v$CLI_VERSION)"
         git commit --amend -m "$COMMIT_TITLE" -m "$COMMIT_BODY"
 
         git push origin "$KUBEBUILDER_BRANCH"
