@@ -66,7 +66,7 @@ const jobRequestReviewApproved = "jobRequestReviewApproved.yaml"
 const jobRequestReviewRejected = "jobRequestReviewRejected.yaml"
 const jobRequestReviewWithoutAnnotation = "jobRequestReviewWithoutAnnotation.yaml"
 
-var _ = Describe("Manager", Ordered, func() {
+var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	var controllerPodName string
 
 	BeforeAll(func() {
@@ -86,23 +86,11 @@ var _ = Describe("Manager", Ordered, func() {
 		_, err = utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
 
-		By("waiting for JobRequest CRD to become established")
+		By("waiting for CRDs to become available")
 		Eventually(func(g Gomega) {
-			cmd := exec.Command("kubectl", "get", "crd", "jobrequests.platform.publishing.service.gov.uk",
-				"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
-
-			output, err := utils.Run(cmd)
+			cmd := exec.Command("kubectl", "get", "--raw", "/apis/platform.publishing.service.gov.uk/v1")
+			_, err := utils.Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(output).To(Equal("True"), "JobRequest CRD not established")
-		}).Should(Succeed())
-
-		By("waiting for JobRequestReview CRD to become established")
-		Eventually(func(g Gomega) {
-			cmd := exec.Command("kubectl", "get", "crd", "jobrequestreviews.platform.publishing.service.gov.uk",
-				"-o", "jsonpath={.status.conditions[?(@.type=='Established')].status}")
-			output, err := utils.Run(cmd)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(output).To(Equal("True"), "JobRequestReview CRD not established")
 		}).Should(Succeed())
 
 		By("deploying the controller-manager")
@@ -206,107 +194,7 @@ var _ = Describe("Manager", Ordered, func() {
 	SetDefaultEventuallyTimeout(2 * time.Minute)
 	SetDefaultEventuallyPollingInterval(time.Second)
 
-	Context("MutatingAdmissionPolicy", func() {
-		BeforeEach(func() {
-			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
-
-			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
-
-			cmd := exec.Command("kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
-
-			By("waiting for the govuk-replatform-test-app deployment to become available.")
-			verifyDeploymentInAvailableState := func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "deployments", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
-			}
-			Eventually(verifyDeploymentInAvailableState).Should(Succeed())
-		})
-
-		It("Should add requested-by annotation to JobRequests", func() {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithoutAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.Command("kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("kubernetes-admin"))
-			}).Should(Succeed())
-		})
-
-		It("Should override a user-specified requested-by annotation on JobRequests", func() {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.Command("kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("kubernetes-admin"))
-			}).Should(Succeed())
-		})
-
-		It("Should add reviewed-by annotation to JobRequestReviews", func() {
-			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithoutAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.Command("kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
-
-			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("kubernetes-admin"))
-			}).Should(Succeed())
-		})
-
-		It("Should override a user set reviewed-by annotation on JobRequestReviews", func() {
-			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejected)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.Command("kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
-
-			Eventually(func(g Gomega) {
-				cmd := exec.Command("kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("kubernetes-admin"))
-			}).Should(Succeed())
-		})
-	})
-
-	Context("Manager", func() {
+	Context("when checking manager health", func() {
 		It("should run successfully", func() {
 			By("validating that the controller-manager pod is running as expected")
 			verifyControllerUp := func(g Gomega) {
@@ -433,7 +321,109 @@ var _ = Describe("Manager", Ordered, func() {
 			}
 			Eventually(verifyMetricsAvailable).Should(Succeed())
 		})
+	})
 
+	Context("MutatingAdmissionPolicy", func() {
+		BeforeEach(func() {
+			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
+
+			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
+
+			cmd := exec.Command("kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
+
+			By("waiting for the govuk-replatform-test-app deployment to become available.")
+			verifyDeploymentInAvailableState := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployments", "govuk-replatform-test-app",
+					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
+			}
+			Eventually(verifyDeploymentInAvailableState).Should(Succeed())
+		})
+
+		It("Should add requested-by annotation to JobRequests", func() {
+			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithoutAnnotation)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd := exec.Command("kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
+					"-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("kubernetes-admin"))
+			}).Should(Succeed())
+		})
+
+		It("Should override a user-specified requested-by annotation on JobRequests", func() {
+			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd := exec.Command("kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
+					"-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("kubernetes-admin"))
+			}).Should(Succeed())
+		})
+
+		It("Should add reviewed-by annotation to JobRequestReviews", func() {
+			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithoutAnnotation)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd := exec.Command("kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
+
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
+					"-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("kubernetes-admin"))
+			}).Should(Succeed())
+		})
+
+		It("Should override a user set reviewed-by annotation on JobRequestReviews", func() {
+			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejected)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd := exec.Command("kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace)
+
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
+
+			Eventually(func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
+					"-n", appNamespace)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("kubernetes-admin"))
+			}).Should(Succeed())
+		})
+	})
+
+	Context("when processing job requests", func() {
 		It("should create and successfully complete a job that is approved", func() {
 			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
 
