@@ -106,11 +106,14 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Expect(k8sClient.Create(ctx, appsNamespace)).To(Succeed())
 		})
 
-		AfterAll(func() {
-			By("delete apps namespace")
-			Expect(k8sClient.Delete(ctx, appsNamespace)).To(Succeed())
-			By("stop the manager")
-			cancel()
+		BeforeEach(func() {
+			By("verify events are empty")
+			eventList := &eventsv1.EventList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(eventList.Items).To(BeEmpty())
+			}, 1*time.Minute, 5*time.Second).Should(Succeed())
 		})
 
 		AfterEach(func() {
@@ -138,6 +141,13 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 
 			By("tearing down the Events")
 			Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, opts)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			By("delete apps namespace")
+			Expect(k8sClient.Delete(ctx, appsNamespace)).To(Succeed())
+			By("stop the manager")
+			cancel()
 		})
 
 		It("should successfully reconcile when JobRequest is 'Approved' and the job successfully runs", func() {
