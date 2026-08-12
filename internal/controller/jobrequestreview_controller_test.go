@@ -100,12 +100,14 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		AfterAll(func() {
-			By("delete apps namespace")
-			err := k8sClient.Delete(ctx, appsNamespace)
-			Expect(err).NotTo(HaveOccurred())
-			By("stop the manager")
-			cancel()
+		BeforeEach(func() {
+			By("verify events are empty")
+			eventList := &eventsv1.EventList{}
+
+			Eventually(func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(eventList.Items).To(BeEmpty())
+			}, 1*time.Minute, 5*time.Second).Should(Succeed())
 		})
 
 		AfterEach(func() {
@@ -127,6 +129,14 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 
 			By("tearing down the Events")
 			Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, opts)).To(Succeed())
+		})
+
+		AfterAll(func() {
+			By("delete apps namespace")
+			err := k8sClient.Delete(ctx, appsNamespace)
+			Expect(err).NotTo(HaveOccurred())
+			By("stop the manager")
+			cancel()
 		})
 
 		It("should successfully reconcile with JobRequestReview state as JobRequestNotFound if the corresponding JobRequest doesn't exist", func() {
