@@ -187,7 +187,7 @@ $(LOCALBIN):
 ## Tool Binaries
 KUBECTL ?= kubectl
 KIND ?= kind
-KUBEBUILDER ?= kubebuilder
+KUBEBUILDER ?= go tool kubebuilder
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
@@ -276,20 +276,10 @@ HELM_EXTRA_ARGS ?=
 
 .PHONY: build-helm-chart
 build-helm-chart:
-	@command -v $(KUBEBUILDER) >/dev/null 2>&1 || { \
-		echo "Kubebuilder is not installed. Please install Kubebuilder manually."; \
-		exit 1; \
-	}
-
 	$(KUBEBUILDER) edit --plugins helm/v2-alpha --force
 
 .PHONY: package-helm-chart
 package-helm-chart: build-installer
-	@command -v $(KUBEBUILDER) >/dev/null 2>&1 || { \
-		echo "Kubebuilder is not installed. Please install Kubebuilder manually."; \
-		exit 1; \
-	}
-
 	$(KUBEBUILDER) edit --plugins helm/v2-alpha --force
 	
 	# patch values.yaml to point to GHCR by default
