@@ -283,6 +283,25 @@ build-helm-chart:
 
 	$(KUBEBUILDER) edit --plugins helm/v2-alpha --force
 
+.PHONY: package-helm-chart
+package-helm-chart: build-installer
+	@command -v $(KUBEBUILDER) >/dev/null 2>&1 || { \
+		echo "Kubebuilder is not installed. Please install Kubebuilder manually."; \
+		exit 1; \
+	}
+
+	$(KUBEBUILDER) edit --plugins helm/v2-alpha --force
+	
+	# patch values.yaml to point to GHCR by default
+	yq -i '.manager.image.repository = "ghcr.io/alphagov/govuk/govuk-job-request-operator"' dist/chart/values.yaml
+	# patch Chart.yaml to set org.opencontainers.image.source
+	yq -i '.annotations."org.opencontainers.image.source" = "https://github.com/alphagov/govuk-job-request-operator"' dist/chart/Chart.yaml
+	helm package dist/chart --version "$(VERSION)" --app-version "$(VERSION)"
+
+.PHONY: push-helm-chart
+push-helm-chart: package-helm-chart
+	helm push "govuk-job-request-operator-$(VERSION).tgz" oci://ghcr.io/alphagov/govuk/charts
+
 .PHONY: install-helm
 install-helm: ## Install the latest version of Helm.
 	@command -v $(HELM) >/dev/null 2>&1 || { \
