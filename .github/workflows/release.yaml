@@ -16,20 +16,26 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      version: "${{ steps.calculate-version.outputs.VERSION }}"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           fetch-depth: 0
-      - run: |
+      - id: calculate-version
+        run: |
           NEW_VERSION=$(scripts/calculate-semver.sh "${{ github.event.inputs.level }}")
           echo "Calculated new version: $NEW_VERSION"
           git tag "$NEW_VERSION"
           echo "Pushing new tag: $NEW_VERSION"
           git push --tags
+          echo "VERSION=${NEW_VERSION}" >> "${GITHUB_OUTPUT}"
   publish:
     uses: ./.github/workflows/publish.yaml
     needs: release
+    with:
+      version: "${{ needs.release.outputs.version }}"
     permissions:
       contents: write
       packages: write

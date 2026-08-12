@@ -2,22 +2,22 @@
 
 This is a k8s operator that is used to make job requests built with [kube-builder](https://github.com/kubernetes-sigs/kubebuilder).
 
-## Usage
+## Installation
 
-To install the required dependencies:
+Requires Kubernetes >=1.36
 
-```shell
-brew install kubebuilder
-brew install helm
-brew install k3d
+Install the Helm chart, where `$VERSION` is the [latest release](https://github.com/alphagov/govuk-job-request-operator/releases) version (e.g. `v1.2.3`):
+
+```bash
+helm install my-operator oci://ghcr.io/alphagov/govuk/charts/govuk-job-request-operator:$VERSION
 ```
 
-## Pre-commit hooks
+## Usage
 
-We have some [recommended pre-commit hooks](.pre-commit-config.yaml). You need
-to [install `pre-commit`](https://pre-commit.com/#install) for these to run.
+[govuk-cli](https://github.com/alphagov/govuk-cli) is the recommended way to interact with this operator.
 
 ### Custom Resource Definitions (CRDs)
+
 #### JobRequest
 
 A `JobRequest` represents a request to run a command/job.
@@ -63,6 +63,21 @@ spec:
 status:
   state: Approved
 ```
+
+## Development
+
+To install the required dependencies:
+
+```shell
+brew install kubebuilder
+brew install helm
+brew install k3d
+```
+
+### Pre-commit hooks
+
+We have some [recommended pre-commit hooks](.pre-commit-config.yaml). You need
+to [install `pre-commit`](https://pre-commit.com/#install) for these to run.
 
 ### Create and generate the manifests
 
@@ -154,6 +169,18 @@ See https://github.com/kubernetes-sigs/kind/issues/3795 to turn off containerd i
 make test-e2e
 ```
 
+### IDE Settings
+
+In order for `gopls` to pick up the `test/e2e` package ensure your IDE settings have `"-tags=e2e"` added. Add the following to VSCode's `settings.json`:
+
+```
+{
+    "go.buildFlags": [
+        "-tags=e2e"
+    ]
+}
+```
+
 ## Release a new version
 
 This project uses [Semantic Versioning](https://semver.org/).
@@ -172,18 +199,7 @@ The release process works as follows:
    3. Packages up the binary and CRD resources into a .tar.gz
    4. Creates a GitHub Release with the packaged binary and creates a changelog based on commits since last release
    5. Builds a container image
-
-## IDE Settings
-
-In order for `gopls` to pick up the `test/e2e` package ensure your IDE settings have `"-tags=e2e"` added. Set the following for VSCode in `settings.json` have the following:
-
-```
-{
-    "go.buildFlags": [
-        "-tags=e2e"
-    ]
-}
-```
+4. `make push-helm-chart` runs, which generates, packages and pushes the Helm chart
 
 ## Team
 
