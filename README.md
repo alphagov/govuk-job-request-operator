@@ -1,6 +1,6 @@
 # GOV.UK Job Request Operator
 
-This is a k8s operator that is used to make job requests built with [kube-builder](https://github.com/kubernetes-sigs/kubebuilder).
+This is a k8s operator that is used to make job requests built with [kubebuilder](https://github.com/kubernetes-sigs/kubebuilder).
 
 ## Installation
 
@@ -69,7 +69,6 @@ status:
 To install the required dependencies:
 
 ```shell
-brew install kubebuilder
 brew install helm
 brew install k3d
 ```
@@ -142,7 +141,7 @@ make deploy
 1. Generate a Helm chart
 
 ```
-kubebuilder edit --plugins=helm/v2-alpha
+go tool kubebuilder edit --plugins=helm/v2-alpha
 ```
 
 ### Run the integration tests
