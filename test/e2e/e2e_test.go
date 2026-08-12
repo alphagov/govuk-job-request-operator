@@ -370,7 +370,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("arn:aws:sts::123456789:assumed-role/job.req-platformengineer/e2e"))
+				g.Expect(output).To(Equal(JobRequesterUser.ARN))
 			}).Should(Succeed())
 		})
 
@@ -391,7 +391,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("arn:aws:sts::123456789:assumed-role/job.req-platformengineer/e2e"))
+				g.Expect(output).To(Equal(JobRequesterUser.ARN))
 			}).Should(Succeed())
 		})
 
@@ -412,7 +412,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("arn:aws:sts::123456789:assumed-role/job.rev-platformengineer/e2e"))
+				g.Expect(output).To(Equal(JobReviewerUser.ARN))
 			}).Should(Succeed())
 		})
 
@@ -433,7 +433,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("arn:aws:sts::123456789:assumed-role/job.rev-platformengineer/e2e"))
+				g.Expect(output).To(Equal(JobReviewerUser.ARN))
 			}).Should(Succeed())
 		})
 	})
