@@ -93,10 +93,18 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 }
 
 func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context, jobRequest *platformv1.JobRequest) bool {
-	_, err := jobRequest.GetRequestedBy()
+	requestedBy, err := jobRequest.GetRequestedBy()
 
 	if err != nil {
 		r.Log.Error(err, "Missing requested-by field")
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
+		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
+		return false
+	}
+
+	_, err = platformv1.ParseUsernameFromARN(requestedBy)
+	if err != nil {
+		r.Log.Error(err, "Invalid requested-by field")
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
 		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 		return false

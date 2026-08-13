@@ -86,10 +86,18 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 }
 
 func (r *JobRequestReviewReconciler) validateReviewedByAnnotation(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) bool {
-	_, err := jobRequestReview.GetReviewedBy()
+	reviewedBy, err := jobRequestReview.GetReviewedBy()
 
 	if err != nil {
 		r.Log.Error(err, "Missing reviewed-by field")
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		return false
+	}
+
+	_, err = platformv1.ParseUsernameFromARN(reviewedBy)
+	if err != nil {
+		r.Log.Error(err, "Invalid reviewed-by field")
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
 		return false
@@ -144,7 +152,68 @@ func (r *JobRequestReviewReconciler) setState(ctx context.Context, jobRequestRev
 	}
 }
 
+func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx context.Context, jobRequest *platformv1.JobRequest, jobRequestReview *platformv1.JobRequestReview) error {
+	requestedByAnnotation, err := jobRequest.GetRequestedBy()
+	if err != nil {
+		errorMessage := fmt.Sprintf("Error validating reviewer and requester differ. Unable to get requested-by annotation from the JobRequest. Error: %s", err.Error())
+		r.Log.Error(err, errorMessage)
+
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", errorMessage)
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+
+		return errors.New(errorMessage)
+	}
+
+	requester, err := platformv1.ParseUsernameFromARN(requestedByAnnotation)
+	if err != nil {
+		errorMessage := fmt.Sprintf("Error validating reviewer and requester differ. Unable to parse JobRequest requested-by annotation. Error: %s", err.Error())
+		r.Log.Error(err, errorMessage)
+
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", errorMessage)
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+
+		return errors.New(errorMessage)
+	}
+
+	reviewedByAnnotation, err := jobRequestReview.GetReviewedBy()
+	if err != nil {
+		errorMessage := fmt.Sprintf("Error validating reviewer and requester differ. Unable to get reviewed-by annotation from the JobRequestReview. Error: %s", err.Error())
+		r.Log.Error(err, errorMessage)
+
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", errorMessage)
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+
+		return errors.New(errorMessage)
+	}
+
+	reviewer, err := platformv1.ParseUsernameFromARN(reviewedByAnnotation)
+	if err != nil {
+		errorMessage := fmt.Sprintf("error validating reviewer and requester differ. Unable to parse JobRequestReview reviewed-by annotation. Error: %s", err.Error())
+		r.Log.Error(err, errorMessage)
+
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", errorMessage)
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+
+		return errors.New(errorMessage)
+	}
+
+	if reviewer == requester {
+		errorMessage := "the JobRequest cannot be reviewed by a JobRequestReview that was created by the same user as the original JobRequest"
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewConflict), "None", errorMessage)
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewConflict)
+
+		return errors.New(errorMessage)
+	}
+
+	return nil
+}
+
 func (r *JobRequestReviewReconciler) handleReviewDecision(ctx context.Context, jobRequest *platformv1.JobRequest, jobRequestReview *platformv1.JobRequestReview) (ctrl.Result, error) {
+	err := r.validateReviewerAndRequesterDiffer(ctx, jobRequest, jobRequestReview)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	jobRequest.Status.State = platformv1.JobRequestState(jobRequestReview.Spec.Decision)
 	jobRequest.Status.ReviewName = jobRequestReview.Name
 

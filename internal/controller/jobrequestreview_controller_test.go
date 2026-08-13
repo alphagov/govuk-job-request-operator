@@ -297,6 +297,87 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			}).Should(Succeed())
 		})
 
+		DescribeTable("when the JobRequestReview reviewed-by annotation is parsed",
+			func(reviewedByAnnotation string, expectedJRRStatus platformv1.JobRequestReviewState, expectedJRStatus platformv1.JobRequestState) {
+				By("Creating the JobRequest")
+				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+
+				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+				jobRequest.Status = platformv1.JobRequestStatus{
+					State: platformv1.JobRequestPending,
+				}
+				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+				By("Creating the JobRequestReview")
+				jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, string(platformv1.JobRequestReviewRejected))
+				jobRequestReview.Annotations[platformv1.JobRequestReviewReviewedByAnnotation] = reviewedByAnnotation
+				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
+					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+					g.Expect(jobRequestReview.Status.State).To(Equal(expectedJRRStatus))
+					g.Expect(jobRequest.Status.State).To(Equal(expectedJRStatus))
+				}).Should(Succeed())
+			},
+			Entry("when the reviewed-by annotation is not an ARN the JobRequestReivew should become Malformed",
+				"wibble", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
+			Entry("when the reviewed-by-annotation is not an assumed-role the JobRequestReivew should become Malformed",
+				"arn:aws:sts::123456789:user/joe.blogs", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
+			Entry("when the reviewed-by-annotation is not a valid gds-users role or EntraID user the JobRequestReview should become Malformed",
+				"arn:aws:sts::123456789:assumed-role/foo/bar", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
+			Entry("when the reviewed-by-annotation is a valid gds-users user it reviews the JobRequest",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+			Entry("when the reviewed-by-annotation is a valid EntraID user it reviews the JobRequest",
+				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+		)
+
+		DescribeTable("the JobRequestReview should go into Conflict state without reviewing the JobRequest if the reviewer is the same as the requester",
+			func(requester string, reviewer string) {
+				By("Creating the JobRequest")
+				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+				jobRequest.Annotations[platformv1.JobRequestRequestedByAnnotation] = requester
+
+				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+				jobRequest.Status = platformv1.JobRequestStatus{
+					State: platformv1.JobRequestPending,
+				}
+				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+				By("Creating the JobRequestReview")
+				jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, string(platformv1.JobRequestReviewRejected))
+				jobRequestReview.Annotations[platformv1.JobRequestReviewReviewedByAnnotation] = reviewer
+				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
+					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+					g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewConflict))
+					g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestPending))
+				}).Should(Succeed())
+			},
+			Entry(
+				"with identical gds-users reviewer and requester",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/test-platformengineer",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/some-session-name",
+			),
+			Entry(
+				"with same gds-users user but different role",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/test-platformengineer",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-developer/some-session-name",
+			),
+			Entry(
+				"with identical EntraID reviewer and requester",
+				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+			),
+			Entry(
+				"with same EntraID user but different role",
+				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789:assumed-role/Administrator/joe.blogs@dsit.gov.uk",
+			),
+		)
+
 		DescribeTable("when the JobRequest has already been reviewed by another JobRequestReview",
 			func(previousJobRequestReviewState platformv1.JobRequestReviewState, jobRequestState platformv1.JobRequestState) {
 				By("Creating the Jobquest and the prior JobRequestReview")

@@ -573,5 +573,33 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 			Expect(jobList.Items).To(BeEmpty())
 		})
+
+		DescribeTable("when the JobRequest requested-by annotation is parsed",
+			func(requestedByAnnotation string, expectedJRStatus platformv1.JobRequestState) {
+				By("Creating a deployment to target")
+				targetResource := deploymentBuilder(deploymentName, appNamespaceName)
+				Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+
+				By("Creating the JobRequest")
+				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
+				jobRequest.Annotations[platformv1.JobRequestRequestedByAnnotation] = requestedByAnnotation
+				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+				Eventually(func(g Gomega) {
+					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+					g.Expect(jobRequest.Status.State).To(Equal(expectedJRStatus))
+				}).Should(Succeed())
+			},
+			Entry("when the requested-by annotation is not an ARN the JobRequest should become Malformed",
+				"wibble", platformv1.JobRequestMalformed),
+			Entry("when the requested-by-annotation is not an assumed-role the JobRequest should become Malformed",
+				"arn:aws:sts::123456789:user/joe.blogs", platformv1.JobRequestMalformed),
+			Entry("when the requested-by-annotation is not a valid gds-users role or EntraID user the JobRequest should become Malformed",
+				"arn:aws:sts::123456789:assumed-role/foo/bar", platformv1.JobRequestMalformed),
+			Entry("when the requested-by-annotation is a valid gds-users user it creates the JobRequest",
+				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestPending),
+			Entry("when the requested-by-annotation is a valid EntraID user it creates the JobRequest",
+				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestPending),
+		)
 	})
 })
