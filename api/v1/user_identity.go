@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var validGDSUsersRoles = [...]string{
+var validGDSUsersRoles = []string{
 	"-fulladmin",
 	"-tempadmin",
 	"-platformengineer",
