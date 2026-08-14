@@ -68,12 +68,12 @@ var (
 	// JobRequesterUser is the user to use for creating JobRequest resources
 	JobRequesterUser = &ClusterUser{
 		Name: "job-requester",
-		ARN:  "arn:aws:sts::123456789:assumed-role/job.req-platformengineer/e2e",
+		ARN:  "arn:aws:sts::123456789012:assumed-role/job.req-developer/e2e",
 	}
 	// JobReviewerUser is the user to use for creating JobRequestReview resources
 	JobReviewerUser = &ClusterUser{
 		Name: "job-reviewer",
-		ARN:  "arn:aws:sts::123456789:assumed-role/job.rev-platformengineer/e2e",
+		ARN:  "arn:aws:sts::123456789012:assumed-role/job.rev-developer/e2e",
 	}
 	// KubernetesUsers will have kubernetes users provisioned into the cluster. Only Name and ARN need to be specified
 	KubernetesUsers = &ClusterUsers{

@@ -28,7 +28,7 @@ kind: JobRequest
 metadata:
   name: something
   annotations:
-    platform.publishing.service.gov.uk/requested-by: arn:aws:sts::123456789:assumed-role/user.name-platformengineer/environment-platformengineer
+    platform.publishing.service.gov.uk/requested-by: arn:aws:sts::123456789012:assumed-role/user.name-platformengineer/environment-platformengineer
 spec:
   containerFrom:
     podSpecFrom:
@@ -55,7 +55,7 @@ kind: JobRequestReview
 metadata:
   name: something-approval
   annotations:
-    platform.publishing.service.gov.uk/reviewed-by: arn:aws:sts::123456789:assumed-role/otheruser.name-platformengineer/environment-platformengineer
+    platform.publishing.service.gov.uk/reviewed-by: arn:aws:sts::123456789012:assumed-role/otheruser.name-platformengineer/environment-platformengineer
 spec:
   jobRequestName: something
   decision: Approved

@@ -593,13 +593,13 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Entry("when the requested-by annotation is not an ARN the JobRequest should become Malformed",
 				"wibble", platformv1.JobRequestMalformed),
 			Entry("when the requested-by-annotation is not an assumed-role the JobRequest should become Malformed",
-				"arn:aws:sts::123456789:user/joe.blogs", platformv1.JobRequestMalformed),
+				"arn:aws:sts::123456789012:user/joe.blogs", platformv1.JobRequestMalformed),
 			Entry("when the requested-by-annotation is not a valid gds-users role or EntraID user the JobRequest should become Malformed",
-				"arn:aws:sts::123456789:assumed-role/foo/bar", platformv1.JobRequestMalformed),
+				"arn:aws:sts::123456789012:assumed-role/foo/bar", platformv1.JobRequestMalformed),
 			Entry("when the requested-by-annotation is a valid gds-users user it creates the JobRequest",
-				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestPending),
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestPending),
 			Entry("when the requested-by-annotation is a valid EntraID user it creates the JobRequest",
-				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestPending),
+				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestPending),
 		)
 	})
 })

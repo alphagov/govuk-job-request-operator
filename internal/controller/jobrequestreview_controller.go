@@ -95,7 +95,7 @@ func (r *JobRequestReviewReconciler) validateReviewedByAnnotation(ctx context.Co
 		return false
 	}
 
-	_, err = platformv1.ParseUsernameFromARN(reviewedBy)
+	_, err = platformv1.ParseUserIdentityFromARN(reviewedBy)
 	if err != nil {
 		r.Log.Error(err, "Invalid reviewed-by field")
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
@@ -164,7 +164,7 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 		return errors.New(errorMessage)
 	}
 
-	requester, err := platformv1.ParseUsernameFromARN(requestedByAnnotation)
+	requester, err := platformv1.ParseUserIdentityFromARN(requestedByAnnotation)
 	if err != nil {
 		errorMessage := fmt.Sprintf("Error validating reviewer and requester differ. Unable to parse JobRequest requested-by annotation. Error: %s", err.Error())
 		r.Log.Error(err, errorMessage)
@@ -186,7 +186,7 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 		return errors.New(errorMessage)
 	}
 
-	reviewer, err := platformv1.ParseUsernameFromARN(reviewedByAnnotation)
+	reviewer, err := platformv1.ParseUserIdentityFromARN(reviewedByAnnotation)
 	if err != nil {
 		errorMessage := fmt.Sprintf("error validating reviewer and requester differ. Unable to parse JobRequestReview reviewed-by annotation. Error: %s", err.Error())
 		r.Log.Error(err, errorMessage)
@@ -197,7 +197,7 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 		return errors.New(errorMessage)
 	}
 
-	if reviewer == requester {
+	if reviewer.UserName == requester.UserName {
 		errorMessage := "the JobRequest cannot be reviewed by a JobRequestReview that was created by the same user as the original JobRequest"
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewConflict), "None", errorMessage)
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewConflict)
