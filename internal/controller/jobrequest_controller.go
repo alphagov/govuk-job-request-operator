@@ -102,7 +102,7 @@ func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context
 		return false
 	}
 
-	_, err = platformv1.ParseUsernameFromARN(requestedBy)
+	_, err = platformv1.ParseUserIdentityFromARN(requestedBy)
 	if err != nil {
 		r.Log.Error(err, "Invalid requested-by field")
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())

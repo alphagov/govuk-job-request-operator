@@ -323,13 +323,13 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			Entry("when the reviewed-by annotation is not an ARN the JobRequestReivew should become Malformed",
 				"wibble", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
 			Entry("when the reviewed-by-annotation is not an assumed-role the JobRequestReivew should become Malformed",
-				"arn:aws:sts::123456789:user/joe.blogs", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
+				"arn:aws:sts::123456789012:user/joe.blogs", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
 			Entry("when the reviewed-by-annotation is not a valid gds-users role or EntraID user the JobRequestReview should become Malformed",
-				"arn:aws:sts::123456789:assumed-role/foo/bar", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
+				"arn:aws:sts::123456789012:assumed-role/foo/bar", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
 			Entry("when the reviewed-by-annotation is a valid gds-users user it reviews the JobRequest",
-				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
 			Entry("when the reviewed-by-annotation is a valid EntraID user it reviews the JobRequest",
-				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
 		)
 
 		DescribeTable("the JobRequestReview should go into Conflict state without reviewing the JobRequest if the reviewer is the same as the requester",
@@ -358,23 +358,23 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			},
 			Entry(
 				"with identical gds-users reviewer and requester",
-				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/test-platformengineer",
-				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/some-session-name",
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/test-platformengineer",
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/some-session-name",
 			),
 			Entry(
 				"with same gds-users user but different role",
-				"arn:aws:sts::123456789:assumed-role/joe.blogs-platformengineer/test-platformengineer",
-				"arn:aws:sts::123456789:assumed-role/joe.blogs-developer/some-session-name",
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/test-platformengineer",
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-developer/some-session-name",
 			),
 			Entry(
 				"with identical EntraID reviewer and requester",
-				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
-				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dsit.gov.uk",
 			),
 			Entry(
 				"with same EntraID user but different role",
-				"arn:aws:sts::123456789:assumed-role/Developer/joe.blogs@dsit.gov.uk",
-				"arn:aws:sts::123456789:assumed-role/Administrator/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/Administrator/joe.blogs@dsit.gov.uk",
 			),
 		)
 
