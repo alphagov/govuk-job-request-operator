@@ -47,6 +47,7 @@ type JobRequestReviewReconciler struct {
 	Scheme          *runtime.Scheme
 	Recorder        events.EventRecorder
 	Log             logr.Logger
+	ResourceTtl     time.Duration
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequestreviews,verbs=get;list;watch;create;update;patch;delete
@@ -58,6 +59,16 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	found := r.getJobRequestReview(ctx, req.NamespacedName, jobRequestReview)
 	if !found {
+		return ctrl.Result{}, nil
+	}
+
+	age := time.Since(jobRequestReview.CreationTimestamp.Time)
+	if age >= r.ResourceTtl {
+		r.Log.Info("Pruning old JobRequestReview", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
+		err := r.CacheClient.Delete(ctx, jobRequestReview)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
 		return ctrl.Result{}, nil
 	}
 

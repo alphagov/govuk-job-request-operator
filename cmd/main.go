@@ -27,6 +27,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"os"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -65,6 +66,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
+	var resourceTtl time.Duration
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -82,6 +84,7 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.DurationVar(&resourceTtl, "resource-ttl", 720*time.Hour, "Clean up old JobRequest/JobReqeuestReview resources older than this duration.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -187,6 +190,7 @@ func main() {
 		Scheme:          mgr.GetScheme(),
 		Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 		Log:             mgr.GetLogger(),
+		ResourceTtl:     resourceTtl,
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
@@ -198,6 +202,7 @@ func main() {
 		Scheme:          mgr.GetScheme(),
 		Recorder:        mgr.GetEventRecorder("jobrequestreview-controller"),
 		Log:             mgr.GetLogger(),
+		ResourceTtl:     resourceTtl,
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequestreview")
 		os.Exit(1)

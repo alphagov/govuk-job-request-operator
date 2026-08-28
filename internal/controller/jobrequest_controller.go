@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
@@ -52,6 +53,7 @@ type JobRequestReconciler struct {
 	Scheme          *runtime.Scheme
 	Recorder        events.EventRecorder
 	Log             logr.Logger
+	ResourceTtl     time.Duration
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
@@ -88,6 +90,16 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	jobRequestState := r.calculateState(ctx, jobRequest)
+
+	age := time.Since(jobRequest.CreationTimestamp.Time)
+	if age >= r.ResourceTtl {
+		r.Log.Info("Pruning old JobRequest", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+		err := r.CacheClient.Delete(ctx, jobRequest)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
 
 	return r.handleState(ctx, jobRequestState, jobRequest, jobTemplate, req.NamespacedName)
 }

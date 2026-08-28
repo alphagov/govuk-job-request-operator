@@ -42,12 +42,17 @@ import (
 	batch "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/events"
+	log "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 )
+
+const defaultTestResourceTtl = 720 * time.Hour
 
 var _ = Describe("JobRequest Controller", Ordered, func() {
 	Context("When reconciling a resource", func() {
@@ -94,6 +99,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				ApiServerClient: mgr.GetAPIReader(),
 				Scheme:          mgr.GetScheme(),
 				Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
+				ResourceTtl:     defaultTestResourceTtl,
 			}).SetupControllerWithManager(mgr)
 
 			go func() {
@@ -601,5 +607,101 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			Entry("when the requested-by-annotation is a valid EntraID user it creates the JobRequest",
 				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestPending),
 		)
+	})
+})
+
+var _ = Describe("JobRequest Pruning", Ordered, ContinueOnFailure, func() {
+	ctx := context.Background()
+
+	pruneNamespaceName := "apps-prune"
+	deploymentName := "deployment"
+	containerName := "foo"
+	jobRequestName := "request"
+
+	jobRequestNamespaceName := types.NamespacedName{
+		Name:      jobRequestName,
+		Namespace: pruneNamespaceName,
+	}
+
+	pruneNamespace := &v1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pruneNamespaceName,
+			Namespace: pruneNamespaceName,
+		},
+	}
+
+	reconcilerWithTtl := func(resourceTtl time.Duration) *JobRequestReconciler {
+		return &JobRequestReconciler{
+			CacheClient:     k8sClient,
+			ApiServerClient: k8sClient,
+			Scheme:          k8sClient.Scheme(),
+			Recorder:        events.NewFakeRecorder(10),
+			Log:             log.Log,
+			ResourceTtl:     resourceTtl,
+		}
+	}
+
+	reconcile := func(reconciler *JobRequestReconciler) (ctrl.Result, error) {
+		return reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: jobRequestNamespaceName})
+	}
+
+	BeforeAll(func() {
+		By("creating apps-prune namespace")
+		Expect(k8sClient.Create(ctx, pruneNamespace)).To(Succeed())
+	})
+
+	BeforeEach(func() {
+		By("creating the target resource and the JobRequest")
+		Expect(k8sClient.Create(ctx, deploymentBuilder(deploymentName, pruneNamespaceName))).To(Succeed())
+		Expect(k8sClient.Create(ctx, jobRequestBuilder(jobRequestName, deploymentName, pruneNamespaceName, containerName))).To(Succeed())
+	})
+
+	AfterEach(func() {
+		var background metav1.DeletionPropagation = "Background"
+		var graceSecs int64 = 0
+		opts := &client.DeleteAllOfOptions{}
+		opts.Namespace = pruneNamespaceName
+		opts.GracePeriodSeconds = &graceSecs
+		opts.PropagationPolicy = &background
+
+		By("tearing down the JobRequests")
+		Expect(k8sClient.DeleteAllOf(ctx, &platformv1.JobRequest{}, opts)).To(Succeed())
+
+		By("tearing down the Deployments")
+		Expect(k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, opts)).To(Succeed())
+	})
+
+	AfterAll(func() {
+		By("deleting apps-prune namespace")
+		Expect(k8sClient.Delete(ctx, pruneNamespace)).To(Succeed())
+	})
+
+	It("should not prune a JobRequest that is younger than the resource TTL", func() {
+		reconciler := reconcilerWithTtl(defaultTestResourceTtl)
+
+		result, err := reconcile(reconciler)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ctrl.Result{}))
+
+		By("verifying the JobRequest still exists and reconciliation continued")
+		jobRequest := &platformv1.JobRequest{}
+		Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+		Expect(jobRequest.DeletionTimestamp).To(BeNil())
+		Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestPending))
+	})
+
+	It("should prune a JobRequest that is older than the resource TTL", func() {
+		reconciler := reconcilerWithTtl(100 * time.Millisecond)
+
+		By("reconciling until the JobRequest is older than the resource TTL")
+		Eventually(func(g Gomega) {
+			result, err := reconcile(reconciler)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(result).To(Equal(ctrl.Result{}))
+
+			jobRequest := &platformv1.JobRequest{}
+			err = k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)
+			g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected the JobRequest to have been pruned")
+		}).Should(Succeed())
 	})
 })
