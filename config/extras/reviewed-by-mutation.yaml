@@ -5,13 +5,16 @@ metadata:
   name: reviewed-by-mutation
 spec:
   matchConstraints:
+    matchPolicy: Equivalent
+    namespaceSelector: {}
+    objectSelector: {}
     resourceRules:
       - apiGroups: ["platform.publishing.service.gov.uk"]
         apiVersions: ["v1"]
         operations: ["CREATE"]
         resources:
           - jobrequestreviews
-  matchConditions: []
+        scope: "*"
   failurePolicy: Fail
   reinvocationPolicy: IfNeeded
   mutations:
