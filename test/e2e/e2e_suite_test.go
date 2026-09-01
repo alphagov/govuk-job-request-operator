@@ -107,10 +107,12 @@ var _ = BeforeSuite(func() {
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager image into Kind")
 
 	By("loading the govuk-replatform-test-app image on Kind")
-	cmd = exec.Command("docker", "pull", govukReplatformTestAppImage)
+	// This command is a workaround to kind not supporting the docker-desktop containerd image store fully
+	// See https://github.com/kubernetes-sigs/kind/issues/3795, once this is resolved we should be able
+	// to just docker pull the image and call utils.LoadImageToKindClusterWithName on it
+	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", kindCluster), "ctr", "--namespace=k8s.io", "images", "pull", govukReplatformTestAppImage)
 	_, err = utils.Run(cmd)
-	err = utils.LoadImageToKindClusterWithName(govukReplatformTestAppImage)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager image into Kind")
+	Expect(err).NotTo(HaveOccurred(), "Failed to load the govuk-replatform-test-app image into Kind")
 
 	setupCertManager()
 })
