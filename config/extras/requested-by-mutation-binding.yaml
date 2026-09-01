@@ -5,4 +5,7 @@ metadata:
   name: requested-by-mutation-binding
 spec:
   policyName: requested-by-mutation
-  matchResources: {}
+  matchResources:
+    matchPolicy: Equivalent
+    namespaceSelector: {}
+    objectSelector: {}
