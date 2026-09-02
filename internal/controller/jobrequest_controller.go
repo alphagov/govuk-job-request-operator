@@ -71,6 +71,16 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
+	age := time.Since(jobRequest.CreationTimestamp.Time)
+	if age >= r.ResourceTtl {
+		r.Log.Info("Pruning old JobRequest", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+		err := r.CacheClient.Delete(ctx, jobRequest)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
 	if endReconcileIfInTerminalState(jobRequest.Status.State) {
 		return ctrl.Result{}, nil
 	}
@@ -90,16 +100,6 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	jobRequestState := r.calculateState(ctx, jobRequest)
-
-	age := time.Since(jobRequest.CreationTimestamp.Time)
-	if age >= r.ResourceTtl {
-		r.Log.Info("Pruning old JobRequest", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
-		err := r.CacheClient.Delete(ctx, jobRequest)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		return ctrl.Result{}, nil
-	}
 
 	return r.handleState(ctx, jobRequestState, jobRequest, jobTemplate, req.NamespacedName)
 }
