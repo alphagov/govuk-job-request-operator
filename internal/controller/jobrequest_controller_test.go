@@ -25,6 +25,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"time"
 
@@ -53,6 +54,13 @@ import (
 )
 
 const defaultTestResourceTtl = 720 * time.Hour
+
+type PruneTestCase struct {
+	InitialState  platformv1.JobRequestState
+	ExpectedState platformv1.JobRequestState
+	Reviewed      bool
+	JobLaunched   bool
+}
 
 var _ = Describe("JobRequest Controller", Ordered, func() {
 	Context("When reconciling a resource", func() {
@@ -651,9 +659,8 @@ var _ = Describe("JobRequest Pruning", Ordered, ContinueOnFailure, func() {
 	})
 
 	BeforeEach(func() {
-		By("creating the target resource and the JobRequest")
+		By("creating the target resource")
 		Expect(k8sClient.Create(ctx, deploymentBuilder(deploymentName, pruneNamespaceName))).To(Succeed())
-		Expect(k8sClient.Create(ctx, jobRequestBuilder(jobRequestName, deploymentName, pruneNamespaceName, containerName))).To(Succeed())
 	})
 
 	AfterEach(func() {
@@ -667,6 +674,9 @@ var _ = Describe("JobRequest Pruning", Ordered, ContinueOnFailure, func() {
 		By("tearing down the JobRequests")
 		Expect(k8sClient.DeleteAllOf(ctx, &platformv1.JobRequest{}, opts)).To(Succeed())
 
+		By("tearing down the JobRequestReviews")
+		Expect(k8sClient.DeleteAllOf(ctx, &platformv1.JobRequestReview{}, opts)).To(Succeed())
+
 		By("tearing down the Deployments")
 		Expect(k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, opts)).To(Succeed())
 	})
@@ -676,32 +686,83 @@ var _ = Describe("JobRequest Pruning", Ordered, ContinueOnFailure, func() {
 		Expect(k8sClient.Delete(ctx, pruneNamespace)).To(Succeed())
 	})
 
-	It("should not prune a JobRequest that is younger than the resource TTL", func() {
-		reconciler := reconcilerWithTtl(defaultTestResourceTtl)
+	for _, pruneTestCase := range []PruneTestCase{
+		{InitialState: platformv1.JobRequestPending, ExpectedState: platformv1.JobRequestPending, Reviewed: false, JobLaunched: false},
+		{InitialState: platformv1.JobRequestApproved, ExpectedState: platformv1.JobRequestStarted, Reviewed: true, JobLaunched: true},
+		{InitialState: platformv1.JobRequestRejected, ExpectedState: platformv1.JobRequestRejected, Reviewed: true, JobLaunched: false},
+		{InitialState: platformv1.JobRequestStarted, ExpectedState: platformv1.JobRequestStarted, Reviewed: true, JobLaunched: true},
+		{InitialState: platformv1.JobRequestComplete, ExpectedState: platformv1.JobRequestComplete, Reviewed: true, JobLaunched: true},
+		{InitialState: platformv1.JobRequestFailed, ExpectedState: platformv1.JobRequestFailed, Reviewed: true, JobLaunched: false},
+		{InitialState: platformv1.JobRequestMalformed, ExpectedState: platformv1.JobRequestMalformed, Reviewed: false, JobLaunched: false},
+	} {
 
-		result, err := reconcile(reconciler)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result).To(Equal(ctrl.Result{}))
+		It(fmt.Sprintf("should not prune a %s JobRequest that is younger than the resource TTL", pruneTestCase.InitialState), func() {
+			By(fmt.Sprintf("creating the JobRequest in a %s state", pruneTestCase.InitialState))
+			jobRequest := SetupJobRequestForPruneTest(
+				ctx, pruneTestCase, jobRequestName, deploymentName, pruneNamespaceName, containerName,
+			)
 
-		By("verifying the JobRequest still exists and reconciliation continued")
-		jobRequest := &platformv1.JobRequest{}
-		Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-		Expect(jobRequest.DeletionTimestamp).To(BeNil())
-		Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestPending))
-	})
+			By("Creating the reconciler and reconciling the resource")
+			reconciler := reconcilerWithTtl(defaultTestResourceTtl)
 
-	It("should prune a JobRequest that is older than the resource TTL", func() {
-		reconciler := reconcilerWithTtl(100 * time.Millisecond)
-
-		By("reconciling until the JobRequest is older than the resource TTL")
-		Eventually(func(g Gomega) {
 			result, err := reconcile(reconciler)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(ctrl.Result{}))
 
-			jobRequest := &platformv1.JobRequest{}
-			err = k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)
-			g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected the JobRequest to have been pruned")
-		}).Should(Succeed())
-	})
+			By("verifying the JobRequest still exists and reconciliation continued")
+			Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+			Expect(jobRequest.DeletionTimestamp).To(BeNil())
+			Expect(jobRequest.Status.State).To(Equal(pruneTestCase.ExpectedState))
+		})
+
+		It(fmt.Sprintf("should prune a %s JobRequest that is older than the resource TTL", pruneTestCase.InitialState), func() {
+			By(fmt.Sprintf("creating the JobRequest in a %s state", pruneTestCase.InitialState))
+			jobRequest := SetupJobRequestForPruneTest(
+				ctx, pruneTestCase, jobRequestName, deploymentName, pruneNamespaceName, containerName,
+			)
+
+			By("Creating the reconciler and reconciling the resource")
+			reconciler := reconcilerWithTtl(100 * time.Millisecond)
+
+			By("reconciling until the JobRequest is older than the resource TTL")
+			Eventually(func(g Gomega) {
+				result, err := reconcile(reconciler)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(result).To(Equal(ctrl.Result{}))
+
+				err = k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)
+				g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected the JobRequest to have been pruned")
+			}).Should(Succeed())
+		})
+	}
 })
+
+func SetupJobRequestForPruneTest(ctx context.Context, pruneTestCase PruneTestCase, requestName, deploymentName, namespaceName, containerName string) *platformv1.JobRequest {
+	jobRequest := jobRequestBuilder(requestName, deploymentName, namespaceName, containerName)
+	Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+	if pruneTestCase.Reviewed {
+		By("creating the JobRequestReview")
+		var reviewDecision string
+		if pruneTestCase.InitialState == platformv1.JobRequestRejected {
+			reviewDecision = string(platformv1.JobRequestReviewRejected)
+		} else {
+			reviewDecision = string(platformv1.JobRequestReviewApproved)
+		}
+		jobRequestReview := jobRequestReviewBuilder(requestName, namespaceName, "review", reviewDecision)
+		Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+	}
+
+	By(fmt.Sprintf("updating the JobRequest to the %s state", pruneTestCase.InitialState))
+
+	jobRequest.Status = platformv1.JobRequestStatus{State: pruneTestCase.InitialState}
+	if pruneTestCase.Reviewed {
+		jobRequest.Status.ReviewName = "review"
+	}
+	if pruneTestCase.JobLaunched {
+		jobRequest.Status.JobName = "job"
+	}
+	Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+	return jobRequest
+}
