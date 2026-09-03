@@ -65,11 +65,11 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	age := time.Since(jobRequestReview.CreationTimestamp.Time)
 	if age >= r.ResourceTtl {
 		r.Log.Info("Pruning old JobRequestReview", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
-		err := r.CacheClient.Delete(ctx, jobRequestReview)
-		if err != nil {
-			return ctrl.Result{}, err
+		errMaybeNil := r.CacheClient.Delete(ctx, jobRequestReview)
+		if apierrors.IsNotFound(errMaybeNil) || apierrors.IsGone(errMaybeNil) {
+			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, nil
+		return ctrl.Result{}, errMaybeNil
 	}
 
 	if jobRequestReview.Status.State != "" {
