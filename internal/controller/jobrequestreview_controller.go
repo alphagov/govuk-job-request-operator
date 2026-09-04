@@ -47,6 +47,7 @@ type JobRequestReviewReconciler struct {
 	Scheme          *runtime.Scheme
 	Recorder        events.EventRecorder
 	Log             logr.Logger
+	ResourceTtl     time.Duration
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequestreviews,verbs=get;list;watch;create;update;patch;delete
@@ -59,6 +60,16 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	found := r.getJobRequestReview(ctx, req.NamespacedName, jobRequestReview)
 	if !found {
 		return ctrl.Result{}, nil
+	}
+
+	age := time.Since(jobRequestReview.CreationTimestamp.Time)
+	if age >= r.ResourceTtl {
+		r.Log.Info("Pruning old JobRequestReview", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
+		errMaybeNil := r.CacheClient.Delete(ctx, jobRequestReview)
+		if apierrors.IsNotFound(errMaybeNil) || apierrors.IsGone(errMaybeNil) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, errMaybeNil
 	}
 
 	if jobRequestReview.Status.State != "" {
@@ -77,12 +88,16 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-	resourceResult, jobRequest := r.getJobRequest(ctx, jobRequestReview)
-	if resourceResult != nil {
-		return *resourceResult, nil
+	jobRequestList, err := r.getJobRequest(ctx, jobRequestReview)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
+	if len(jobRequestList.Items) == 0 {
+		return ctrl.Result{}, nil
+	}
+	jobRequest := jobRequestList.Items[0]
 
-	return r.handleState(ctx, jobRequest, jobRequestReview)
+	return r.handleState(ctx, &jobRequest, jobRequestReview)
 }
 
 func (r *JobRequestReviewReconciler) validateReviewedByAnnotation(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) bool {
@@ -122,26 +137,32 @@ func (r *JobRequestReviewReconciler) getJobRequestReview(ctx context.Context, na
 	return true
 }
 
-func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) (*ctrl.Result, *platformv1.JobRequest) {
-	requestList := &platformv1.JobRequestList{}
+func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) (platformv1.JobRequestList, error) {
+	jobRequestList := platformv1.JobRequestList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"metadata.name": jobRequestReview.Spec.JobRequestName},
 	}
 
-	if err := r.ApiServerClient.List(ctx, requestList, opts...); err != nil || len(requestList.Items) == 0 {
-		// State is already not found, no need to log anymore
-		if jobRequestReview.Status.State == platformv1.JobRequestReviewNotFound {
-			return &ctrl.Result{}, nil
-		}
-
-		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewNotFound), "None", "JobRequest could not be found")
-		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewNotFound)
-
-		r.Log.Error(err, "Failed to retrieve JobRequest")
-		return &ctrl.Result{}, nil
+	err := r.ApiServerClient.List(ctx, &jobRequestList, opts...)
+	if err != nil {
+		r.Log.Error(err, "Failed to retrieve JobRequest to review")
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, "Api Error", "None", fmt.Sprintf("Error when trying to list job requests from the API: %s", err.Error()))
+		return jobRequestList, err
 	}
 
-	return nil, &requestList.Items[0]
+	if len(jobRequestList.Items) == 0 {
+		// State is already not found, no need to log anymore
+		if jobRequestReview.Status.State == platformv1.JobRequestReviewNotFound {
+			return jobRequestList, nil
+		}
+
+		err := fmt.Errorf("job request %s could not be found", jobRequestReview.Spec.JobRequestName)
+		r.Log.Error(err, "Failed to retrieve JobRequest")
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewNotFound), "None", "JobRequest could not be found")
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewNotFound)
+	}
+
+	return jobRequestList, nil
 }
 
 func (r *JobRequestReviewReconciler) setState(ctx context.Context, jobRequestReview *platformv1.JobRequestReview, state platformv1.JobRequestReviewState) {

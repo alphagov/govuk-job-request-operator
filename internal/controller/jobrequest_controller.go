@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
@@ -52,6 +53,7 @@ type JobRequestReconciler struct {
 	Scheme          *runtime.Scheme
 	Recorder        events.EventRecorder
 	Log             logr.Logger
+	ResourceTtl     time.Duration
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
@@ -69,6 +71,16 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
+	age := time.Since(jobRequest.CreationTimestamp.Time)
+	if age >= r.ResourceTtl {
+		r.Log.Info("Pruning old JobRequest", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+		errMaybeNil := r.CacheClient.Delete(ctx, jobRequest)
+		if apierrors.IsNotFound(errMaybeNil) || apierrors.IsGone(errMaybeNil) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, errMaybeNil
+	}
+
 	if endReconcileIfInTerminalState(jobRequest.Status.State) {
 		return ctrl.Result{}, nil
 	}
@@ -77,9 +89,12 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	resourceResult, resourceList := r.getTargetResource(ctx, jobRequest)
-	if resourceResult != nil {
-		return *resourceResult, nil
+	resourceList, err := r.getTargetResource(ctx, jobRequest)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if len(resourceList.Items) == 0 {
+		return ctrl.Result{}, nil
 	}
 
 	jobTemplate := r.createJobTemplate(ctx, &resourceList.Items[0], *jobRequest)
@@ -137,20 +152,27 @@ func endReconcileIfInTerminalState(jobRequestState platformv1.JobRequestState) b
 	}, jobRequestState)
 }
 
-func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest *platformv1.JobRequest) (*ctrl.Result, *appsv1.DeploymentList) {
-	deploymentList := &appsv1.DeploymentList{}
+func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest *platformv1.JobRequest) (appsv1.DeploymentList, error) {
+	deploymentList := appsv1.DeploymentList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"metadata.name": jobRequest.Spec.ContainerFrom.PodSpecFrom.Name},
 	}
 
-	if err := r.ApiServerClient.List(ctx, deploymentList, opts...); err != nil || len(deploymentList.Items) == 0 {
+	err := r.ApiServerClient.List(ctx, &deploymentList, opts...)
+	if err != nil {
+		r.Log.Error(err, "Failed to retrieve target resource")
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Api Error", "None", fmt.Sprintf("Error when trying to list target resources from the API: %s", err.Error()))
+		return deploymentList, err
+	}
+
+	if len(deploymentList.Items) == 0 {
+		err := fmt.Errorf("target resource %s could not be found", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name)
 		r.Log.Error(err, "Failed to retrieve target resource")
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Target resource could not be found")
 		r.setState(ctx, jobRequest, "Malformed")
-		return &ctrl.Result{}, nil
 	}
 
-	return nil, deploymentList
+	return deploymentList, nil
 }
 
 func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *appsv1.Deployment, jobRequest platformv1.JobRequest) *batch.Job {

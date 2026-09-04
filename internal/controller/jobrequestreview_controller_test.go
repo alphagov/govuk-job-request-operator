@@ -38,7 +38,10 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/events"
+	log "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 )
@@ -87,6 +90,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 				ApiServerClient: mgr.GetAPIReader(),
 				Scheme:          mgr.GetScheme(),
 				Recorder:        mgr.GetEventRecorder("jobrequestreview-controller"),
+				ResourceTtl:     defaultTestResourceTtl,
 			}).SetupControllerWithManager(mgr)
 
 			go func() {
@@ -455,4 +459,169 @@ var _ = Describe("JobRequestReview Controller", Ordered, func() {
 			Entry("when the jobRequestReview was Accepted and the JobRequest is now in a Complete state", platformv1.JobRequestReviewApproved, platformv1.JobRequestComplete),
 		)
 	})
+})
+
+var _ = Describe("JobRequestReview Pruning", Ordered, ContinueOnFailure, func() {
+	ctx := context.Background()
+
+	pruneNamespaceName := "apps-review-prune"
+	deploymentName := "review-prune-deployment"
+	containerName := "foo"
+	jobRequestName := "review-prune-request"
+	jobRequestReviewName := "review-prune-review"
+
+	jobRequestNamespaceName := types.NamespacedName{
+		Name:      jobRequestName,
+		Namespace: pruneNamespaceName,
+	}
+
+	jobRequestReviewNamespaceName := types.NamespacedName{
+		Name:      jobRequestReviewName,
+		Namespace: pruneNamespaceName,
+	}
+
+	pruneNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      pruneNamespaceName,
+			Namespace: pruneNamespaceName,
+		},
+	}
+
+	reconcilerWithTtl := func(resourceTtl time.Duration) *JobRequestReviewReconciler {
+		return &JobRequestReviewReconciler{
+			CacheClient:     k8sClient,
+			ApiServerClient: k8sClient,
+			Scheme:          k8sClient.Scheme(),
+			Recorder:        events.NewFakeRecorder(10),
+			Log:             log.Log,
+			ResourceTtl:     resourceTtl,
+		}
+	}
+
+	reconcile := func(reconciler *JobRequestReviewReconciler) (ctrl.Result, error) {
+		return reconciler.Reconcile(ctx, ctrl.Request{NamespacedName: jobRequestReviewNamespaceName})
+	}
+
+	createJobRequest := func(state platformv1.JobRequestState) {
+		Expect(k8sClient.Create(ctx, deploymentBuilder(deploymentName, pruneNamespaceName))).To(Succeed())
+
+		jobRequest := jobRequestBuilder(jobRequestName, deploymentName, pruneNamespaceName, containerName)
+		Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+		if state != "" {
+			jobRequest.Status.State = state
+			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+		}
+	}
+
+	createJobRequestReview := func(decision string) {
+		Expect(k8sClient.Create(ctx, jobRequestReviewBuilder(jobRequestName, pruneNamespaceName, jobRequestReviewName, decision))).To(Succeed())
+	}
+
+	// expectPruned reconciles until the JobRequestReview is older than
+	// the resource TTL and has been deleted
+	expectPruned := func() {
+		reconciler := reconcilerWithTtl(100 * time.Millisecond)
+
+		Eventually(func(g Gomega) {
+			result, err := reconcile(reconciler)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(result).To(Equal(ctrl.Result{}))
+
+			jobRequestReview := &platformv1.JobRequestReview{}
+			err = k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)
+			g.Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected the JobRequestReview to have been pruned")
+		}).Should(Succeed())
+	}
+
+	BeforeAll(func() {
+		By("creating apps-review-prune namespace")
+		Expect(k8sClient.Create(ctx, pruneNamespace)).To(Succeed())
+	})
+
+	AfterEach(func() {
+		var background metav1.DeletionPropagation = "Background"
+		var graceSecs int64 = 0
+		opts := &client.DeleteAllOfOptions{}
+		opts.Namespace = pruneNamespaceName
+		opts.GracePeriodSeconds = &graceSecs
+		opts.PropagationPolicy = &background
+
+		By("tearing down the JobRequestReviews")
+		Expect(k8sClient.DeleteAllOf(ctx, &platformv1.JobRequestReview{}, opts)).To(Succeed())
+
+		By("tearing down the JobRequests")
+		Expect(k8sClient.DeleteAllOf(ctx, &platformv1.JobRequest{}, opts)).To(Succeed())
+
+		By("tearing down the Deployments")
+		Expect(k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, opts)).To(Succeed())
+	})
+
+	AfterAll(func() {
+		By("deleting apps-review-prune namespace")
+		Expect(k8sClient.Delete(ctx, pruneNamespace)).To(Succeed())
+	})
+
+	It("should not prune a JobRequestReview that is younger than the resource TTL", func() {
+		createJobRequest(platformv1.JobRequestPending)
+		createJobRequestReview("Approved")
+
+		reconciler := reconcilerWithTtl(defaultTestResourceTtl)
+
+		result, err := reconcile(reconciler)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result).To(Equal(ctrl.Result{}))
+
+		By("verifying the JobRequestReview still exists and reconciliation continued")
+		jobRequestReview := &platformv1.JobRequestReview{}
+		Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
+		Expect(jobRequestReview.DeletionTimestamp).To(BeNil())
+		Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewApproved))
+
+		By("verifying the JobRequest was not deleted")
+		Expect(k8sClient.Get(ctx, jobRequestNamespaceName, &platformv1.JobRequest{})).To(Succeed())
+	})
+
+	It("should prune a JobRequestReview that is older than the resource TTL", func() {
+		createJobRequest(platformv1.JobRequestPending)
+		createJobRequestReview("Approved")
+
+		expectPruned()
+
+		By("verifying the JobRequest was not deleted")
+		Expect(k8sClient.Get(ctx, jobRequestNamespaceName, &platformv1.JobRequest{})).To(Succeed())
+	})
+
+	DescribeTable("should prune a JobRequestReview that is older than the resource TTL",
+		func(decision string, jobRequestState platformv1.JobRequestState, jobRequestExists bool, expectedReviewState platformv1.JobRequestReviewState) {
+			if jobRequestExists {
+				createJobRequest(jobRequestState)
+			}
+			createJobRequestReview(decision)
+
+			By("reconciling within the TTL so the JobRequestReview reaches its state")
+			jobRequestReview := &platformv1.JobRequestReview{}
+			Eventually(func(g Gomega) {
+				_, err := reconcile(reconcilerWithTtl(defaultTestResourceTtl))
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
+				g.Expect(jobRequestReview.Status.State).To(Equal(expectedReviewState))
+			}).Should(Succeed())
+
+			expectPruned()
+
+			if jobRequestExists {
+				By("verifying the JobRequest was not deleted")
+				Expect(k8sClient.Get(ctx, jobRequestNamespaceName, &platformv1.JobRequest{})).To(Succeed())
+			}
+		},
+		Entry("when the JobRequestReview is Rejected",
+			"Rejected", platformv1.JobRequestPending, true, platformv1.JobRequestReviewRejected),
+		Entry("when the JobRequestReview is Approved",
+			"Approved", platformv1.JobRequestPending, true, platformv1.JobRequestReviewApproved),
+		Entry("when the JobRequest is Malformed",
+			"Approved", platformv1.JobRequestMalformed, true, platformv1.JobRequestReviewMalformed),
+		Entry("when the JobRequest is missing",
+			"Approved", platformv1.JobRequestState(""), false, platformv1.JobRequestReviewNotFound),
+	)
 })

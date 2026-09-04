@@ -12,6 +12,25 @@ Install the Helm chart, where `$VERSION` is the [latest release](https://github.
 helm install my-operator oci://ghcr.io/alphagov/govuk/charts/govuk-job-request-operator:$VERSION
 ```
 
+### Configuration
+
+This operator automatically cleans up old JobRequest and JobRequestReview resources.
+The TTL for these resources can be configured via the `-resource-ttl` command line flag. This flag takes a Go time.Duration string.
+
+Default: `720h` (30 days)
+
+Example: `manager --resource-ttl 24h`.
+
+It can also be configured in Helm values:
+
+```yaml
+manager:
+  args:
+    - --leader-elect
+    - --resource-ttl
+    - 24h
+```
+
 ## Usage
 
 [govuk-cli](https://github.com/alphagov/govuk-cli) is the recommended way to interact with this operator.
