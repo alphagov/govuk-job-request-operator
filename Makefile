@@ -286,6 +286,8 @@ package-helm-chart: build-installer
 	yq -i '.manager.image.repository = "ghcr.io/alphagov/govuk/govuk-job-request-operator"' dist/chart/values.yaml
 	# patch Chart.yaml to set org.opencontainers.image.source
 	yq -i '.annotations."org.opencontainers.image.source" = "https://github.com/alphagov/govuk-job-request-operator"' dist/chart/Chart.yaml
+	CREATED_TIME=$$(date +%Y%m%dT%H:%M:%SZ) \
+        yq -i '.annotations."org.opencontainers.image.created" = strenv(CREATED_TIME)' dist/chart/Chart.yaml
 	helm package dist/chart --version "$(VERSION)" --app-version "$(VERSION)"
 
 .PHONY: push-helm-chart
