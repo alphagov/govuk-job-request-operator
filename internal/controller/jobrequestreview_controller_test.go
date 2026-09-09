@@ -46,7 +46,7 @@ import (
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 )
 
-var _ = Describe("JobRequestReview Controller", Ordered, func() {
+var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func() {
 	Context("When reconciling a resource", func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		SetDefaultEventuallyTimeout(10 * time.Second)
