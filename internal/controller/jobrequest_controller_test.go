@@ -62,7 +62,7 @@ type PruneTestCase struct {
 	JobLaunched   bool
 }
 
-var _ = Describe("JobRequest Controller", Ordered, func() {
+var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 	Context("When reconciling a resource", func() {
 		scheme := runtime.NewScheme()
 		utilruntime.Must(clientgoscheme.AddToScheme(scheme))
@@ -124,10 +124,10 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 			By("verify events are empty")
 			eventList := &eventsv1.EventList{}
 
-			Eventually(func(g Gomega) {
+			Consistently(func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(eventList.Items).To(BeEmpty())
-			}, 1*time.Minute, 5*time.Second).Should(Succeed())
+			}, 10*time.Second, 1*time.Second).Should(Succeed())
 		})
 
 		AfterEach(func() {
@@ -155,6 +155,10 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 
 			By("tearing down the Events")
 			Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, opts)).To(Succeed())
+
+			By("tearing down the Deployments in the default namespace")
+			opts.Namespace = "default"
+			Expect(k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, opts)).To(Succeed())
 		})
 
 		AfterAll(func() {
@@ -293,6 +297,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestMalformed))
 				g.Expect(eventList.Items).To(HaveLen(2))
 				g.Expect(eventList.Items[1].Reason).To(Equal(string(platformv1.JobRequestMalformed)))
+				g.Expect(eventList.Items[1].Note).To(Equal("Job could not be found"))
 			}).Should(Succeed())
 		})
 
@@ -442,7 +447,9 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 		})
 
 		It("should successfully reconcile if we cannot retrieve the target resource in the JobRequest from the cluster and the job should not be created", func() {
-			jobRequest := jobRequestBuilder(jobRequestName, "example-app", appNamespaceName, "example-container")
+			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
+			targetResource := deploymentBuilder(deploymentName, "default")
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
 			eventList := &eventsv1.EventList{}
@@ -453,6 +460,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestMalformed))
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestMalformed)))
+				g.Expect(eventList.Items[0].Note).To(Equal("Target resource could not be found"))
 			}).Should(Succeed())
 		})
 
@@ -471,6 +479,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestMalformed))
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestMalformed)))
+				g.Expect(eventList.Items[0].Note).To(Equal("Target container on Deployment could not be found"))
 			}).Should(Succeed())
 		})
 
@@ -580,6 +589,7 @@ var _ = Describe("JobRequest Controller", Ordered, func() {
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestMalformed)))
+				g.Expect(eventList.Items[0].Note).To(Equal("JobRequest request does not include the requested-by annotation"))
 			}).Should(Succeed())
 
 			jobList := &batch.JobList{}

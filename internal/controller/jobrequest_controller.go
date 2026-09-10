@@ -156,6 +156,8 @@ func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest
 	deploymentList := appsv1.DeploymentList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"metadata.name": jobRequest.Spec.ContainerFrom.PodSpecFrom.Name},
+		//nolint:goconst
+		client.MatchingFields{"metadata.namespace": jobRequest.GetNamespace()},
 	}
 
 	err := r.ApiServerClient.List(ctx, &deploymentList, opts...)
@@ -228,7 +230,9 @@ func retrieveContainerFromResource(resource *appsv1.Deployment, jobRequest platf
 func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *platformv1.JobRequest) platformv1.JobRequestState {
 	jobRequestReviewList := &platformv1.JobRequestReviewList{}
 	opts := []client.ListOption{
-		client.MatchingFields{"spec.jobRequestName": jobRequest.GetObjectMeta().GetName()},
+		client.MatchingFields{"spec.jobRequestName": jobRequest.GetName()},
+		//nolint:goconst
+		client.MatchingFields{"metadata.namespace": jobRequest.GetNamespace()},
 	}
 
 	if err := r.ApiServerClient.List(ctx, jobRequestReviewList, opts...); err != nil {
