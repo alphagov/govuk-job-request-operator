@@ -63,6 +63,18 @@ type JobRequestReconciler struct {
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 
+<<<<<<< HEAD
+// Reconcile is part of the main kubernetes reconciliation loop which aims to
+// move the current state of the cluster closer to the desired state.
+// TODO(user): Modify the Reconcile function to compare the state specified by
+// the JobRequest object against the actual cluster state, and then
+// perform operations to make the cluster state reflect the state specified by
+// the user.
+//
+// For more details, check Reconcile and its Result here:
+// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.25.0/pkg/reconcile
+=======
+>>>>>>> tmp-original-11-09-26-07-12
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequest := &platformv1.JobRequest{}
 
