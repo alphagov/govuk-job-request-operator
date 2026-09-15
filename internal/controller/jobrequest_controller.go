@@ -34,7 +34,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batch "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/utils/ptr"
 
 	"k8s.io/client-go/tools/events"
 
@@ -66,50 +65,72 @@ type JobRequestReconciler struct {
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequest := &platformv1.JobRequest{}
 
+	r.Log.Info("[JobRequestReconciler] Received job", "jobRequestName", req.NamespacedName)
+
 	found := r.getJobRequest(ctx, req.NamespacedName, jobRequest)
 	if !found {
+		r.Log.Info("[JobRequestReconciler] Job request not found. Ending reconciliation.", "jobRequestName", req.NamespacedName)
 		return ctrl.Result{}, nil
 	}
 
 	age := time.Since(jobRequest.CreationTimestamp.Time)
 	if age >= r.ResourceTtl {
-		r.Log.Info("Pruning old JobRequest", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+		r.Log.Info("[JobRequestReconciler] Pruning old JobRequest", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
 		errMaybeNil := r.CacheClient.Delete(ctx, jobRequest)
 		if apierrors.IsNotFound(errMaybeNil) || apierrors.IsGone(errMaybeNil) {
+			r.Log.Info("[JobRequestReconciler] Job request is already deleted. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, errMaybeNil
+		if errMaybeNil != nil {
+			r.Log.Error(errMaybeNil, "[JobRequestReconciler] Reconcile will try again.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+			return ctrl.Result{}, errMaybeNil
+		}
+		r.Log.Info("[JobRequestReconciler] resource deleted after expired ttl. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+		return ctrl.Result{}, nil
 	}
 
 	if endReconcileIfInTerminalState(jobRequest.Status.State) {
+		r.Log.Info("[JobRequestReconciler] Resource reached it's terminal state. Ending reconciliation.", "state", jobRequest.Status.State, "name", jobRequest.Name, "namespace", jobRequest.Namespace)
 		return ctrl.Result{}, nil
 	}
 
 	if !r.validateRequestedByAnnotation(ctx, jobRequest) {
+		requestedByAnnotation, _ := jobRequest.GetRequestedBy()
+		r.Log.Info("[JobRequestReconciler] Could not validate requestedByAnnotation annotation. Ending reconciliation.", "jobRequestAnnotation", requestedByAnnotation, "name", jobRequest.Name, "namespace", jobRequest.Namespace)
 		return ctrl.Result{}, nil
 	}
 
 	resourceList, err := r.getTargetResource(ctx, jobRequest)
 	if err != nil {
+		r.Log.Error(err, "[JobRequestReconciler] error getting target resource. Reconcile will try again.", "targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name, "state", jobRequest.Status.State, "name", jobRequest.Name, "namespace", jobRequest.Namespace)
 		return ctrl.Result{}, err
 	}
 	if len(resourceList.Items) == 0 {
+		r.Log.Info("[JobRequestReconciler] Couldn't find the target resource. Ending reconciliation.", "targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name, "name", jobRequest.Name, "namespace", jobRequest.Namespace)
 		return ctrl.Result{}, nil
 	}
 
 	jobTemplate := r.createJobTemplate(ctx, &resourceList.Items[0], *jobRequest)
 	if jobTemplate == nil {
+		r.Log.Info("[JobRequestReconciler] Couldn't create job template. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace)
 		return ctrl.Result{}, nil
 	}
 
+	r.Log.Info("[JobRequestReconciler] Calculating state.", "name", jobRequest.Name, "namespace", jobRequest.Namespace)
 	jobRequestState := r.calculateState(ctx, jobRequest)
 
-	return r.handleState(ctx, jobRequestState, jobRequest, jobTemplate, req.NamespacedName)
+	result, err := r.handleState(ctx, jobRequestState, jobRequest, jobTemplate, req.NamespacedName)
+	if err != nil {
+		r.Log.Error(err, "[JobRequestReconciler] Error handling state. Reconcile will try again.", "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+		return result, err
+	}
+
+	r.Log.Info("[JobRequestReconciler] Handle state successful. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+	return result, nil
 }
 
 func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context, jobRequest *platformv1.JobRequest) bool {
 	requestedBy, err := jobRequest.GetRequestedBy()
-
 	if err != nil {
 		r.Log.Error(err, "Missing requested-by field")
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
@@ -198,7 +219,7 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	jobTemplatePodSpec.Spec.Containers = targetContainer
 	jobTemplatePodSpec.Spec.RestartPolicy = corev1.RestartPolicyNever
 	job.Spec.Template = jobTemplatePodSpec
-	job.Spec.BackoffLimit = ptr.To(int32(0))
+	job.Spec.BackoffLimit = new(int32(0))
 
 	maps.Copy(job.Annotations, resource.Annotations)
 	maps.Copy(job.Labels, resource.Labels)
