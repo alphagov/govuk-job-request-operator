@@ -188,6 +188,7 @@ func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest
 		return deploymentList, err
 	}
 
+	r.Log.Info("The list returned from the api server for the target resource / deployment", "result", deploymentList.Items)
 	if len(deploymentList.Items) == 0 {
 		err := fmt.Errorf("target resource %s could not be found", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name)
 		r.Log.Error(err, "Failed to retrieve target resource")
