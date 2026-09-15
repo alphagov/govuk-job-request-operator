@@ -57,6 +57,8 @@ type JobRequestReviewReconciler struct {
 func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequestReview := &platformv1.JobRequestReview{}
 
+	r.Log.Info("[JobRequestReviewReconciler] Received job", "jobRequestReviewName", req.NamespacedName)
+
 	found := r.getJobRequestReview(ctx, req.NamespacedName, jobRequestReview)
 	if !found {
 		return ctrl.Result{}, nil
@@ -64,18 +66,24 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	age := time.Since(jobRequestReview.CreationTimestamp.Time)
 	if age >= r.ResourceTtl {
-		r.Log.Info("Pruning old JobRequestReview", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
+		r.Log.Info("[JobRequestReviewReconciler] Pruning old JobRequestReview", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
 		errMaybeNil := r.CacheClient.Delete(ctx, jobRequestReview)
 		if apierrors.IsNotFound(errMaybeNil) || apierrors.IsGone(errMaybeNil) {
+			r.Log.Info("[JobRequestReviewReconciler] Job request review is already deleted. Ending reconciliation.", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
 			return ctrl.Result{}, nil
 		}
-		return ctrl.Result{}, errMaybeNil
+		if errMaybeNil != nil {
+			r.Log.Error(errMaybeNil, "[JobRequestReviewReconciler] Reconcile will try again.", "error", errMaybeNil, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
+			return ctrl.Result{}, errMaybeNil
+		}
+		r.Log.Info("[JobRequestReviewReconciler] resource deleted after expired ttl. Ending reconciliation.", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
+		return ctrl.Result{}, nil
 	}
 
 	if jobRequestReview.Status.State != "" {
 		r.Log.Info(
 			fmt.Sprintf(
-				"JobRequestReview %s presented for reconcilliation, but it already has State %s, no further reconcilliation will happen",
+				"[JobRequestReviewReconciler] JobRequestReview %s presented for reconcilliation, but it already has State %s. Ending reconcilliation.",
 				jobRequestReview.Name,
 				jobRequestReview.Status.State,
 			),
@@ -85,24 +93,33 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	}
 
 	if !r.validateReviewedByAnnotation(ctx, jobRequestReview) {
+		r.Log.Info("[JobRequestReviewReconciler] Resource reached it's terminal state. Ending reconciliation.", "state", jobRequestReview.Status.State, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace)
 		return ctrl.Result{}, nil
 	}
 
 	jobRequestList, err := r.getJobRequest(ctx, jobRequestReview)
 	if err != nil {
+		r.Log.Error(err, "[JobRequestReviewReconciler] error getting target resource. Reconcile will try again.", "targetResource", jobRequestReview.Spec.JobRequestName, "state", jobRequestReview.Status.State, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "jobRequestName", jobRequestReview.Spec.JobRequestName)
 		return ctrl.Result{}, err
 	}
 	if len(jobRequestList.Items) == 0 {
+		r.Log.Info("[JobRequestReviewReconciler] Couldn't find the target resource. Ending reconciliation.", "targetResource", jobRequestReview.Spec.JobRequestName, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "jobRequestName", jobRequestReview.Spec.JobRequestName)
 		return ctrl.Result{}, nil
 	}
 	jobRequest := jobRequestList.Items[0]
 
-	return r.handleState(ctx, &jobRequest, jobRequestReview)
+	result, err := r.handleState(ctx, &jobRequest, jobRequestReview)
+	if err != nil {
+		r.Log.Error(err, "[JobRequestReviewReconciler] Error handling state. Reconcile will try again.", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace)
+		return result, err
+	}
+
+	r.Log.Info("[JobRequestReviewReconciler] Handle state successful. Ending reconciliation.", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace)
+	return result, nil
 }
 
 func (r *JobRequestReviewReconciler) validateReviewedByAnnotation(ctx context.Context, jobRequestReview *platformv1.JobRequestReview) bool {
 	reviewedBy, err := jobRequestReview.GetReviewedBy()
-
 	if err != nil {
 		r.Log.Error(err, "Missing reviewed-by field")
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
