@@ -116,8 +116,8 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	r.Log.Info("[JobRequestReconciler] Calculating state.", "name", jobRequest.Name, "namespace", jobRequest.Namespace)
 	jobRequestState := r.calculateState(ctx, jobRequest)
+	r.Log.Info("[JobRequestReconciler] Calculated state.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequestState)
 
 	result, err := r.handleState(ctx, jobRequestState, jobRequest, jobTemplate, req.NamespacedName)
 	if err != nil {
@@ -125,7 +125,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return result, err
 	}
 
-	r.Log.Info("[JobRequestReconciler] Handle state successful. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+	r.Log.Info("[JobRequestReconciler] Handle state successful. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequest.Status.State)
 	return result, nil
 }
 
@@ -262,6 +262,7 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 	}
 
 	if len(jobRequestReviewList.Items) == 0 {
+		r.Log.Info("No JobRequestReview found for JobRequest", "jobRequestName", jobRequest.Name, "namespace", jobRequest.GetNamespace())
 		if jobRequest.Status.State == "" {
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Pending", "None", "JobRequest is waiting for a JobRequestReview")
 			return platformv1.JobRequestPending
