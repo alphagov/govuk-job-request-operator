@@ -199,6 +199,18 @@ In order for `gopls` to pick up the `test/e2e` package ensure your IDE settings 
 }
 ```
 
+In neovim add the following to your gopls lsp setup:
+
+```lua
+require('lspconfig').gopls.setup({
+  settings = {
+    gopls = {
+      buildFlags = { "-tags=e2e" },
+    },
+  },
+})
+```
+
 ## Release a new version
 
 This project uses [Semantic Versioning](https://semver.org/).
