@@ -158,8 +158,7 @@ func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobReque
 	jobRequestList := platformv1.JobRequestList{}
 	opts := []client.ListOption{
 		client.MatchingFields{"metadata.name": jobRequestReview.Spec.JobRequestName},
-		//nolint:goconst
-		client.MatchingFields{"metadata.namespace": jobRequestReview.GetNamespace()},
+		client.InNamespace(jobRequestReview.GetNamespace()),
 	}
 
 	err := r.ApiServerClient.List(ctx, &jobRequestList, opts...)
