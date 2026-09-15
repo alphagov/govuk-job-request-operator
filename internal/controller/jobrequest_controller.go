@@ -256,6 +256,12 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 		client.MatchingFields{"metadata.namespace": jobRequest.GetNamespace()},
 	}
 
+	if jobRequest.Status.State == "" {
+		r.Log.Info("No JobRequestReview found for JobRequest", "jobRequestName", jobRequest.Name, "namespace", jobRequest.GetNamespace())
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Pending", "None", "JobRequest is waiting for a JobRequestReview")
+		return platformv1.JobRequestPending
+	}
+
 	if err := r.ApiServerClient.List(ctx, jobRequestReviewList, opts...); err != nil {
 		r.Log.Error(err, "Failed to retrieve JobRequestReview")
 		return platformv1.JobRequestPending
@@ -263,10 +269,7 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 
 	if len(jobRequestReviewList.Items) == 0 {
 		r.Log.Info("No JobRequestReview found for JobRequest", "jobRequestName", jobRequest.Name, "namespace", jobRequest.GetNamespace())
-		if jobRequest.Status.State == "" {
-			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Pending", "None", "JobRequest is waiting for a JobRequestReview")
-			return platformv1.JobRequestPending
-		}
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Pending", "None", "JobRequest is waiting for a JobRequestReview")
 		return platformv1.JobRequestPending
 	}
 
@@ -342,6 +345,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 
 		return ctrl.Result{}, nil
 	default:
+		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "UnknownState", "None", "HandleState() fell through to default state: %s", jobRequest.Status.State)
 		return ctrl.Result{}, nil
 	}
 }
