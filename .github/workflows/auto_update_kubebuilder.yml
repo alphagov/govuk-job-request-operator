@@ -61,7 +61,6 @@ jobs:
 
         git rm -r dist
         git rm -r config/samples
-        git rm -r AGENTS.md
         git rm -r .github/workflows
         git checkout main -- .github/workflows
 
