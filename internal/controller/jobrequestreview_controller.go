@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
@@ -48,6 +49,7 @@ type JobRequestReviewReconciler struct {
 	Recorder        events.EventRecorder
 	Log             logr.Logger
 	ResourceTtl     time.Duration
+	CustomMetrics   platformv1.ReviewCustomMetrics
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequestreviews,verbs=get;list;watch;create;update;patch;delete
@@ -56,27 +58,43 @@ type JobRequestReviewReconciler struct {
 
 func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequestReview := &platformv1.JobRequestReview{}
+	r.CustomMetrics.MetricLabels = prometheus.Labels{
+		"namespaced_name": req.Namespace + "/" + req.Name,
+		"state":           "",
+	}
 
 	r.Log.Info("[JobRequestReviewReconciler] Received job", "jobRequestReviewName", req.NamespacedName)
+	r.CustomMetrics.ReceivedTotal.Inc()
 
 	found := r.getJobRequestReview(ctx, req.NamespacedName, jobRequestReview)
 	if !found {
+		r.Log.Info(
+			"[JobRequestReviewReconciler] JobRequestReview not found. Ending reconciliation.",
+			"name", req.Name, "namespace", req.Namespace)
+		r.CustomMetrics.ErrorGettingReviewTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
+
+	r.CustomMetrics.MetricLabels["state"] = string(jobRequestReview.Status.State)
 
 	age := time.Since(jobRequestReview.CreationTimestamp.Time)
 	if age >= r.ResourceTtl {
 		r.Log.Info("[JobRequestReviewReconciler] Pruning old JobRequestReview", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
-		errMaybeNil := r.CacheClient.Delete(ctx, jobRequestReview)
-		if apierrors.IsNotFound(errMaybeNil) || apierrors.IsGone(errMaybeNil) {
+		err := r.CacheClient.Delete(ctx, jobRequestReview)
+		if apierrors.IsNotFound(err) || apierrors.IsGone(err) {
 			r.Log.Info("[JobRequestReviewReconciler] Job request review is already deleted. Ending reconciliation.", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
+			r.CustomMetrics.ErrorAlreadyDeletedTotal.With(r.CustomMetrics.MetricLabels).Inc()
+			r.CustomMetrics.RequeueTotal.With(r.CustomMetrics.MetricLabels).Inc()
 			return ctrl.Result{}, nil
 		}
-		if errMaybeNil != nil {
-			r.Log.Error(errMaybeNil, "[JobRequestReviewReconciler] Reconcile will try again.", "error", errMaybeNil, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
-			return ctrl.Result{}, errMaybeNil
+		if err != nil {
+			r.Log.Error(err, "[JobRequestReviewReconciler] Reconcile will try again.", "error", err, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
+			r.CustomMetrics.ErrorDeletingByTtlTotal.With(r.CustomMetrics.MetricLabels).Inc()
+			r.CustomMetrics.RequeueTotal.With(r.CustomMetrics.MetricLabels).Inc()
+			return ctrl.Result{}, err
 		}
 		r.Log.Info("[JobRequestReviewReconciler] resource deleted after expired ttl. Ending reconciliation.", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "age", age)
+		r.CustomMetrics.DeletedByTtlTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
 
@@ -88,22 +106,25 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				jobRequestReview.Status.State,
 			),
 		)
-
+		r.CustomMetrics.AlreadyHasStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
 
 	if !r.validateReviewedByAnnotation(ctx, jobRequestReview) {
 		r.Log.Info("[JobRequestReviewReconciler] Resource reached it's terminal state. Ending reconciliation.", "state", jobRequestReview.Status.State, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace)
+		r.CustomMetrics.ErrorReviewByAnnoTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
 
 	jobRequestList, err := r.getJobRequest(ctx, jobRequestReview)
 	if err != nil {
 		r.Log.Error(err, "[JobRequestReviewReconciler] error getting target resource. Reconcile will try again.", "targetResource", jobRequestReview.Spec.JobRequestName, "state", jobRequestReview.Status.State, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "jobRequestName", jobRequestReview.Spec.JobRequestName)
+		r.CustomMetrics.ErrorGettingRequestTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, err
 	}
 	if len(jobRequestList.Items) == 0 {
 		r.Log.Info("[JobRequestReviewReconciler] Couldn't find the target resource. Ending reconciliation.", "targetResource", jobRequestReview.Spec.JobRequestName, "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace, "jobRequestName", jobRequestReview.Spec.JobRequestName)
+		r.CustomMetrics.NoRequestFoundTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
 	jobRequest := jobRequestList.Items[0]
@@ -111,10 +132,12 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	result, err := r.handleState(ctx, &jobRequest, jobRequestReview)
 	if err != nil {
 		r.Log.Error(err, "[JobRequestReviewReconciler] Error handling state. Reconcile will try again.", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace)
+		r.CustomMetrics.RequeueTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return result, err
 	}
 
 	r.Log.Info("[JobRequestReviewReconciler] Handle state successful. Ending reconciliation.", "name", jobRequestReview.Name, "namespace", jobRequestReview.Namespace)
+	r.CustomMetrics.SuccessfulReconcileTotal.With(r.CustomMetrics.MetricLabels).Inc()
 	return result, nil
 }
 
@@ -124,6 +147,8 @@ func (r *JobRequestReviewReconciler) validateReviewedByAnnotation(ctx context.Co
 		r.Log.Error(err, "Missing reviewed-by field")
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return false
 	}
 
@@ -132,6 +157,8 @@ func (r *JobRequestReviewReconciler) validateReviewedByAnnotation(ctx context.Co
 		r.Log.Error(err, "Invalid reviewed-by field")
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", err.Error())
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return false
 	}
 
@@ -178,6 +205,8 @@ func (r *JobRequestReviewReconciler) getJobRequest(ctx context.Context, jobReque
 		r.Log.Error(err, "Failed to retrieve JobRequest")
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewNotFound), "None", "JobRequest could not be found")
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewNotFound)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewNotFound)
+		r.CustomMetrics.NotFoundStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 	}
 
 	return jobRequestList, nil
@@ -199,6 +228,8 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", errorMessage)
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 		return errors.New(errorMessage)
 	}
@@ -210,6 +241,8 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", errorMessage)
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 		return errors.New(errorMessage)
 	}
@@ -221,6 +254,8 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", errorMessage)
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 		return errors.New(errorMessage)
 	}
@@ -232,6 +267,8 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", errorMessage)
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 		return errors.New(errorMessage)
 	}
@@ -240,6 +277,8 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 		errorMessage := "the JobRequest cannot be reviewed by a JobRequestReview that was created by the same user as the original JobRequest"
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewConflict), "None", errorMessage)
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewConflict)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewConflict)
+		r.CustomMetrics.ConflictStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 		return errors.New(errorMessage)
 	}
@@ -265,7 +304,16 @@ func (r *JobRequestReviewReconciler) handleReviewDecision(ctx context.Context, j
 	}
 
 	if jobRequestReview.Status.State == "" {
-		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewState(jobRequestReview.Spec.Decision))
+		switch jobRequestReview.Spec.Decision {
+		case string(platformv1.JobRequestReviewApproved):
+			r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewApproved)
+			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewApproved)
+			r.CustomMetrics.ApprovedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
+		case string(platformv1.JobRequestReviewRejected):
+			r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewRejected)
+			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewRejected)
+			r.CustomMetrics.RejectedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -276,6 +324,7 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 	case "":
 		r.Log.Info("JobRequest hasn't finished creating so re-queueing the reconcile")
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeNormal, string(platformv1.JobRequestPending), "None", "JobRequest hasn't finished creating")
+		r.CustomMetrics.RequeueTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
 
 	case platformv1.JobRequestMalformed:
@@ -284,6 +333,8 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewMalformed), "None", "JobRequest is in a Malformed state")
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewMalformed)
+		r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 		return ctrl.Result{}, nil
 
@@ -313,6 +364,8 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 			errorMessage,
 		)
 		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewConflict)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewConflict)
+		r.CustomMetrics.ConflictStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 		return ctrl.Result{}, nil
 	default:

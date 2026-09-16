@@ -29,9 +29,6 @@ import (
 	"os"
 	"time"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -39,22 +36,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	"github.com/alphagov/govuk-job-request-operator/internal/controller"
+	prommetrics "github.com/alphagov/govuk-job-request-operator/internal/metrics"
 	// +kubebuilder:scaffold:imports
 )
-
-var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
-)
-
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	utilruntime.Must(platformv1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
-}
 
 // nolint:gocyclo
 func main() {
@@ -68,7 +53,7 @@ func main() {
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
 	var resourceTtl time.Duration
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8443", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -195,6 +180,7 @@ func main() {
 		Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 		Log:             mgr.GetLogger(),
 		ResourceTtl:     resourceTtl,
+		CustomMetrics:   prommetrics.InitRequestCustomMetrics(),
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
@@ -207,6 +193,7 @@ func main() {
 		Recorder:        mgr.GetEventRecorder("jobrequestreview-controller"),
 		Log:             mgr.GetLogger(),
 		ResourceTtl:     resourceTtl,
+		CustomMetrics:   prommetrics.InitReviewCustomMetrics(),
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequestreview")
 		os.Exit(1)
