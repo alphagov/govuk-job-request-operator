@@ -29,12 +29,14 @@ import (
 	"os"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -47,12 +49,26 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+	goobers  = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "goobers_total",
+			Help: "Number of goobers processed",
+		},
+	)
+	gooberFailures = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "goober_failures_total",
+			Help: "Number of failed goobers",
+		},
+	)
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(platformv1.AddToScheme(scheme))
+
+	metrics.Registry.MustRegister(goobers, gooberFailures)
 	// +kubebuilder:scaffold:scheme
 }
 
