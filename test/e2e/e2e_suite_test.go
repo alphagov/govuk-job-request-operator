@@ -89,54 +89,57 @@ func TestE2E(t *testing.T) {
 	RunSpecs(t, "e2e suite")
 }
 
-var _ = BeforeSuite(func() {
+var _ = BeforeSuite(func(ctx context.Context) {
 	By("creating a Kind cluster for e2e tests")
-	cmd := exec.Command("kind", "create", "cluster", "--name", kindCluster)
+	cmd := exec.CommandContext(ctx, "kind", "create", "cluster", "--name", kindCluster)
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create Kind cluster")
 
-	setupUsers()
+	setupUsers(ctx)
 
 	By("building the manager image")
-	cmd = exec.Command("make", "docker-build", fmt.Sprintf("IMG=%s", managerImage))
+	cmd = exec.CommandContext(ctx, "make", "docker-build", fmt.Sprintf("IMG=%s", managerImage))
 	_, err = utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to build the manager image")
 
 	By("loading the manager image on Kind")
-	err = utils.LoadImageToKindClusterWithName(managerImage)
+	err = utils.LoadImageToKindClusterWithName(ctx, managerImage)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to load the manager image into Kind")
 
 	By("loading the govuk-replatform-test-app image on Kind")
 	// This command is a workaround to kind not supporting the docker-desktop containerd image store fully
 	// See https://github.com/kubernetes-sigs/kind/issues/3795, once this is resolved we should be able
 	// to just docker pull the image and call utils.LoadImageToKindClusterWithName on it
-	cmd = exec.Command("docker", "exec", fmt.Sprintf("%s-control-plane", kindCluster), "ctr", "--namespace=k8s.io", "images", "pull", govukReplatformTestAppImage)
+	cmd = exec.CommandContext(ctx,
+		"docker", "exec", fmt.Sprintf("%s-control-plane", kindCluster),
+		"ctr", "--namespace=k8s.io", "images", "pull", govukReplatformTestAppImage,
+	)
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to load the govuk-replatform-test-app image into Kind")
 
-	setupCertManager()
+	setupCertManager(ctx)
 })
 
-var _ = AfterSuite(func() {
+var _ = AfterSuite(func(ctx context.Context) {
 	By("deleting the kubernetes users from kubeconfig")
-	deleteKubernetesUsersFromKubeconfig(context.Background())
+	deleteKubernetesUsersFromKubeconfig(ctx)
 
 	By("deleting the Kind cluster")
-	cmd := exec.Command("kind", "delete", "cluster", "--name", kindCluster)
+	cmd := exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", kindCluster)
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to delete Kind cluster")
 })
 
 // setupCertManager installs CertManager if needed for webhook tests.
 // Skips installation if CERT_MANAGER_INSTALL_SKIP=true or if already present.
-func setupCertManager() {
+func setupCertManager(ctx context.Context) {
 	if os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true" {
 		_, _ = fmt.Fprintf(GinkgoWriter, "Skipping CertManager installation (CERT_MANAGER_INSTALL_SKIP=true)\n")
 		return
 	}
 
 	By("checking if CertManager is already installed")
-	if utils.IsCertManagerCRDsInstalled() {
+	if utils.IsCertManagerCRDsInstalled(ctx) {
 		_, _ = fmt.Fprintf(GinkgoWriter, "CertManager is already installed. Skipping installation.\n")
 		return
 	}
@@ -145,7 +148,7 @@ func setupCertManager() {
 	shouldCleanupCertManager = true
 
 	By("installing CertManager")
-	Expect(utils.InstallCertManager()).To(Succeed(), "Failed to install CertManager")
+	Expect(utils.InstallCertManager(ctx)).To(Succeed(), "Failed to install CertManager")
 }
 
 func applyKubernetesManifest(ctx context.Context, manifestPath string) error {
@@ -158,9 +161,7 @@ func applyKubernetesManifest(ctx context.Context, manifestPath string) error {
 	return nil
 }
 
-func setupUsers() {
-	ctx := context.Background()
-
+func setupUsers(ctx context.Context) {
 	By("Setting up users in the cluster")
 	tempDir, err := os.MkdirTemp("", "govuk-job-request-operator-e2e-*")
 	Expect(err).NotTo(HaveOccurred(), "Couldn't create tempdir for setting up users")
@@ -281,7 +282,7 @@ func deleteKubernetesUsersFromKubeconfig(ctx context.Context) {
 		_, err := utils.Run(cmd)
 		// This is only called in shutdown, and we don't want to fail the suite shutdown if this errors, so don't Expect success
 		if err != nil {
-			fmt.Sprintf("Failed to delete user %s from kubectl config", user.KubectlUserName)
+			fmt.Printf("Failed to delete user %s from kubectl config", user.KubectlUserName)
 		}
 	}
 }
