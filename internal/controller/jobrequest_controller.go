@@ -38,6 +38,7 @@ import (
 	"k8s.io/client-go/tools/events"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -46,6 +47,12 @@ import (
 	"github.com/go-logr/logr"
 )
 
+type CustomMetrics struct {
+	ReceivedTotal prometheus.Counter
+	ErrorTotal    prometheus.Counter
+	RequeueTotal  prometheus.Counter
+}
+
 type JobRequestReconciler struct {
 	CacheClient     client.Client
 	ApiServerClient client.Reader
@@ -53,6 +60,7 @@ type JobRequestReconciler struct {
 	Recorder        events.EventRecorder
 	Log             logr.Logger
 	ResourceTtl     time.Duration
+	CustomMetrics
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
@@ -66,6 +74,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	jobRequest := &platformv1.JobRequest{}
 
 	r.Log.Info("[JobRequestReconciler] Received JobRequest", "jobRequestName", req.Name, "namespace", req.Namespace)
+	r.CustomMetrics.ReceivedTotal.Inc()
 
 	found := r.getJobRequest(ctx, req.NamespacedName, jobRequest)
 	if !found {
@@ -127,6 +136,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
 			"targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name,
 		)
+		r.CustomMetrics.ErrorTotal.Inc()
 		return ctrl.Result{}, err
 	}
 	if len(resourceList.Items) == 0 {
@@ -159,6 +169,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 			"[JobRequestReconciler] Error handling state for JobRequest. Reconcile will try again.",
 			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "calculatedState", jobRequestState,
 		)
+		r.CustomMetrics.ErrorTotal.Inc()
 		return result, err
 	}
 
@@ -339,6 +350,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 				r.Log.Error(err, "Failed to create Job resource")
 				r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Failed to create Job")
 				r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
+				r.CustomMetrics.ErrorTotal.Inc()
 				return ctrl.Result{}, err
 			}
 
@@ -365,7 +377,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 			r.Log.Error(err, errorLogMessage)
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", "Job could not be found")
 			r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
-
+			r.CustomMetrics.ErrorTotal.Inc()
 			return ctrl.Result{}, nil
 		}
 

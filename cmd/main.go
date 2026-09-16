@@ -47,18 +47,18 @@ import (
 )
 
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
-	goobers  = prometheus.NewCounter(
+	scheme          = runtime.NewScheme()
+	setupLog        = ctrl.Log.WithName("setup")
+	jobRequestTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "goobers_total",
-			Help: "Number of goobers processed",
+			Name: "job_request_total_received",
+			Help: "Total number of job_requests received",
 		},
 	)
-	gooberFailures = prometheus.NewCounter(
+	jobRequestErrors = prometheus.NewCounter(
 		prometheus.CounterOpts{
-			Name: "goober_failures_total",
-			Help: "Number of failed goobers",
+			Name: "job_request_errors_total",
+			Help: "Total number of job requests that errored",
 		},
 	)
 )
@@ -68,7 +68,8 @@ func init() {
 
 	utilruntime.Must(platformv1.AddToScheme(scheme))
 
-	metrics.Registry.MustRegister(goobers, gooberFailures)
+	metrics.Registry.MustRegister(jobRequestTotal, jobRequestErrors)
+
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -211,6 +212,7 @@ func main() {
 		Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 		Log:             mgr.GetLogger(),
 		ResourceTtl:     resourceTtl,
+		CustomMetrics:   controller.CustomMetrics{jobRequestTotal, jobRequestErrors},
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
