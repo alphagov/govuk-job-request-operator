@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 package controller
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -87,9 +88,9 @@ var _ = BeforeSuite(func() {
 	Expect(k8sClient).NotTo(BeNil())
 })
 
-var _ = AfterSuite(func() {
+var _ = AfterSuite(func(ctx context.Context) {
 	By("tearing down the test environment")
-	Eventually(func() error {
+	Eventually(ctx, func() error {
 		return testEnv.Stop()
 	}, time.Minute, time.Second).Should(Succeed())
 })
