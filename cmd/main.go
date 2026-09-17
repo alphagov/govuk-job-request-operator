@@ -47,9 +47,9 @@ import (
 )
 
 var (
-	scheme          = runtime.NewScheme()
-	setupLog        = ctrl.Log.WithName("setup")
-	jobRequestTotal = prometheus.NewCounter(
+	scheme                  = runtime.NewScheme()
+	setupLog                = ctrl.Log.WithName("setup")
+	jobRequestReceivedTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Name: "job_request_total_received",
 			Help: "Total number of job_requests received",
@@ -68,7 +68,7 @@ func init() {
 
 	utilruntime.Must(platformv1.AddToScheme(scheme))
 
-	metrics.Registry.MustRegister(jobRequestTotal, jobRequestErrors)
+	metrics.Registry.MustRegister(jobRequestReceivedTotal, jobRequestErrors)
 
 	// +kubebuilder:scaffold:scheme
 }
