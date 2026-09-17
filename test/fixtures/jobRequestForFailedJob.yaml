@@ -1,7 +1,8 @@
+---
 apiVersion: platform.publishing.service.gov.uk/v1
 kind: JobRequest
 metadata:
-  name: govuk-replatform-test-app
+  name: jr-govuk-replatform-test-app
 spec:
   containerFrom:
     podSpecFrom:
@@ -10,4 +11,4 @@ spec:
       name: govuk-replatform-test-app
     containerName: app
   command: rake
-  args: [ "failed" ]
+  args: ["failed"]

@@ -367,7 +367,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
 
 			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -388,7 +388,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
 
 			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -409,9 +409,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
 
 			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx,
+					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+					"jrr-jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
-					"-n", appNamespace)
+					"-n", appNamespace,
+				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal(JobReviewerUser.ARN))
@@ -430,9 +433,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
 
 			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx,
+					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+					"jrr-jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
-					"-n", appNamespace)
+					"-n", appNamespace,
+				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal(JobReviewerUser.ARN))
@@ -477,7 +483,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
 
 				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 						"-o", "jsonpath={.status.state}",
 						"-n", appNamespace)
 					output, err := utils.Run(cmd)
@@ -496,7 +502,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app-2 jobRequest")
 
 				verifySecondJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app-2",
+					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
 						"-o", "jsonpath={.status.state}",
 						"-n", appNamespace)
 					output, err := utils.Run(cmd)
@@ -518,9 +524,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 				By("verifying the JobRequestReview is Rejected")
 				verifyJobRequestReviewInRejectedState := func(g Gomega) {
-					cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app-2",
+					cmd = exec.CommandContext(ctx,
+						"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+						"jrr-jr-govuk-replatform-test-app-2",
 						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
+						"-n", appNamespace,
+					)
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("Rejected"), "JobRequestReview in wrong status")
@@ -529,7 +538,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 				By("verifying the other JobRequestReview is still Pending")
 				verifyOtherJobRequestStillInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 						"-o", "jsonpath={.status.state}",
 						"-n", appNamespace)
 					output, err := utils.Run(cmd)
@@ -540,7 +549,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 				By("verifying the correct JobRequest is now Rejected")
 				verifyJobRequestInRejectedState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app-2",
+					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
 						"-o", "jsonpath={.status.state}",
 						"-n", appNamespace)
 					output, err := utils.Run(cmd)
@@ -584,7 +593,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
 
 				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 						"-o", "jsonpath={.status.state}",
 						"-n", appNamespace)
 					output, err := utils.Run(cmd)
@@ -605,9 +614,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
 
 				verifyJobRequestReviewInApprovedState := func(g Gomega) {
-					cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+					cmd = exec.CommandContext(ctx,
+						"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+						"jrr-jr-govuk-replatform-test-app",
 						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
+						"-n", appNamespace,
+					)
 					output, err := utils.Run(cmd)
 					g.Expect(err).NotTo(HaveOccurred())
 					g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
@@ -627,7 +639,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app-2 jobRequest")
 
 				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app-2",
+					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
 						"-o", "jsonpath={.status.state}",
 						"-n", appNamespace)
 					output, err := utils.Run(cmd)
@@ -671,7 +683,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
 
 			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -711,9 +723,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			By("JobRequestReview is in Approved state")
 			verifyJobRequestReviewInApprovedState := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd = exec.CommandContext(ctx,
+					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+					"jrr-jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace)
+					"-n", appNamespace,
+				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
@@ -757,8 +772,8 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			By("JobRequest is in Started state")
 			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"jobName":"govuk-replatform-test-app","reviewName":"govuk-replatform-test-app","state":"Started"}`
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				jobRequestStateJSON := `{"jobName":"jr-govuk-replatform-test-app","reviewName":"jrr-jr-govuk-replatform-test-app","state":"Started"}`
+				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -787,7 +802,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			By("Job successfully performs rake task")
 			verifyJobCompleted := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "govuk-replatform-test-app",
+				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.succeeded}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -814,7 +829,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Eventually(ctx, verifyJobRequestCompleteEventEmitted).Should(Succeed())
 
 			verifyJobOutput := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "logs", "jobs/govuk-replatform-test-app", "-n", appNamespace)
+				cmd = exec.CommandContext(ctx, "kubectl", "logs", "jobs/jr-govuk-replatform-test-app", "-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("Hello World!"))
@@ -856,7 +871,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
 
 			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -896,9 +911,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			By("JobRequestReview is in Approved state")
 			verifyJobRequestReviewInApprovedState := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd = exec.CommandContext(ctx,
+					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+					"jrr-jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace)
+					"-n", appNamespace,
+				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
@@ -942,8 +960,8 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			By("JobRequest is in Started state")
 			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"jobName":"govuk-replatform-test-app","reviewName":"govuk-replatform-test-app","state":"Started"}`
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				jobRequestStateJSON := `{"jobName":"jr-govuk-replatform-test-app","reviewName":"jrr-jr-govuk-replatform-test-app","state":"Started"}`
+				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -972,7 +990,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			By("Job fails to perform rake task")
 			verifyJobFailed := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "govuk-replatform-test-app",
+				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.failed}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -1031,7 +1049,9 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
 
 			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx,
+					"kubectl", "get", "jobrequests.platform.publishing.service.gov.uk",
+					"jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -1068,9 +1088,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
 
 			verifyJobRequestReviewInRejectedState := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				cmd = exec.CommandContext(ctx,
+					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+					"jrr-jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace)
+					"-n", appNamespace,
+				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("Rejected"), "JobRequestReview in wrong status")
@@ -1113,8 +1136,8 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			By("JobRequest is in Rejected state")
 			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"reviewName":"govuk-replatform-test-app","state":"Rejected"}`
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "govuk-replatform-test-app",
+				jobRequestStateJSON := `{"reviewName":"jrr-jr-govuk-replatform-test-app","state":"Rejected"}`
+				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
@@ -1126,7 +1149,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			By("Job not created")
 			verifyJobNotStarted := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "govuk-replatform-test-app", "-n", appNamespace)
+				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app", "-n", appNamespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred())
 			}
