@@ -1,8 +1,9 @@
+---
 apiVersion: platform.publishing.service.gov.uk/v1
 kind: JobRequestReview
 metadata:
-  name: govuk-replatform-test-app
+  name: jrr-jr-govuk-replatform-test-app
 spec:
-  jobRequestName: govuk-replatform-test-app
+  jobRequestName: jr-govuk-replatform-test-app
   decision: Rejected
   description: "Not suitable to run"
