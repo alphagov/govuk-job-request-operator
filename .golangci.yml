@@ -27,14 +27,46 @@ linters:
     - usetesting
     - wastedassign
     - zerologlint
+
   settings:
     revive:
       rules:
+        - name: comment-spacings
+        - name: import-shadowing
         - name: dot-imports
           disabled: true
+    modernize:
+      disable:
+        - omitzero
     staticcheck:
       dot-import-whitelist:
         - github.com/onsi/ginkgo/v2
         - github.com/onsi/gomega
     goconst:
       ignore-tests: true
+
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - lll
+        path: api/*
+      - linters:
+          - dupl
+          - lll
+        path: internal/*
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
