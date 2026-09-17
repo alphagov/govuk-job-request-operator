@@ -3,9 +3,6 @@ apiVersion: platform.publishing.service.gov.uk/v1
 kind: JobRequestReview
 metadata:
   name: jrr-jr-govuk-replatform-test-app
-  annotations:
-    platform.publishing.service.gov.uk/requested-by:
-      "arn:aws:sts::123456789012:assumed-role/bar.baz-developer/e2e"
 spec:
   jobRequestName: jr-govuk-replatform-test-app
   decision: Rejected
