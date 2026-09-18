@@ -65,74 +65,117 @@ type JobRequestReconciler struct {
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequest := &platformv1.JobRequest{}
 
-	r.Log.Info("[JobRequestReconciler] Received job", "jobRequestName", req.NamespacedName)
+	r.Log.Info("[JobRequestReconciler] Received JobRequest", "jobRequestName", req.Name, "namespace", req.Namespace)
 
 	found := r.getJobRequest(ctx, req.NamespacedName, jobRequest)
 	if !found {
-		r.Log.Info("[JobRequestReconciler] Job request not found. Ending reconciliation.", "jobRequestName", req.NamespacedName)
+		r.Log.Info(
+			"[JobRequestReconciler] JobRequest not found. Ending reconciliation.",
+			"jobRequestName", req.Name, "namespace", req.Namespace)
 		return ctrl.Result{}, nil
 	}
 
 	age := time.Since(jobRequest.CreationTimestamp.Time)
 	if age >= r.ResourceTtl {
-		r.Log.Info("[JobRequestReconciler] Pruning old JobRequest", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+		r.Log.Info(
+			"[JobRequestReconciler] Pruning old JobRequest",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
+		)
 		errMaybeNil := r.CacheClient.Delete(ctx, jobRequest)
 		if apierrors.IsNotFound(errMaybeNil) || apierrors.IsGone(errMaybeNil) {
-			r.Log.Info("[JobRequestReconciler] Job request is already deleted. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+			r.Log.Info(
+				"[JobRequestReconciler] JobRequest is already deleted. Ending reconciliation.",
+				"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
+			)
 			return ctrl.Result{}, nil
 		}
 		if errMaybeNil != nil {
-			r.Log.Error(errMaybeNil, "[JobRequestReconciler] Reconcile will try again.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+			r.Log.Error(errMaybeNil,
+				"[JobRequestReconciler] Unexpected error when trying to delete JobRequest. Reconcile will try again.",
+				"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
+			)
 			return ctrl.Result{}, errMaybeNil
 		}
-		r.Log.Info("[JobRequestReconciler] resource deleted after expired ttl. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age)
+		r.Log.Info(
+			"[JobRequestReconciler] JobRequest deleted after expired ttl. Ending reconciliation.",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
+		)
 		return ctrl.Result{}, nil
 	}
 
 	if endReconcileIfInTerminalState(jobRequest.Status.State) {
-		r.Log.Info("[JobRequestReconciler] Resource reached it's terminal state. Ending reconciliation.", "state", jobRequest.Status.State, "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+		r.Log.Info(
+			"[JobRequestReconciler] JobRequest reached it's terminal state. Ending reconciliation.",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequest.Status.State,
+		)
 		return ctrl.Result{}, nil
 	}
 
 	if !r.validateRequestedByAnnotation(ctx, jobRequest) {
 		requestedByAnnotation, _ := jobRequest.GetRequestedBy()
-		r.Log.Info("[JobRequestReconciler] Could not validate requestedByAnnotation annotation. Ending reconciliation.", "jobRequestAnnotation", requestedByAnnotation, "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+		r.Log.Info(
+			"[JobRequestReconciler] Could not validate requestedByAnnotation annotation on JobRequest. Ending reconciliation.",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "jobRequestAnnotation", requestedByAnnotation,
+		)
 		return ctrl.Result{}, nil
 	}
 
 	resourceList, err := r.getTargetResource(ctx, jobRequest)
 	if err != nil {
-		r.Log.Error(err, "[JobRequestReconciler] error getting target resource. Reconcile will try again.", "targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name, "state", jobRequest.Status.State, "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+		r.Log.Error(err,
+			"[JobRequestReconciler] error getting target resource for JobRequest. Reconcile will try again.",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
+			"targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name,
+		)
 		return ctrl.Result{}, err
 	}
 	if len(resourceList.Items) == 0 {
-		r.Log.Info("[JobRequestReconciler] Couldn't find the target resource. Ending reconciliation.", "targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name, "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+		r.Log.Info(
+			"[JobRequestReconciler] Couldn't find the target resource for JobRequest. Ending reconciliation.",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
+			"targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name,
+		)
 		return ctrl.Result{}, nil
 	}
 
 	jobTemplate := r.createJobTemplate(ctx, &resourceList.Items[0], *jobRequest)
 	if jobTemplate == nil {
-		r.Log.Info("[JobRequestReconciler] Couldn't create job template. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+		r.Log.Info(
+			"[JobRequestReconciler] Couldn't create Job template for JobRequest. Ending reconciliation.",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
+		)
 		return ctrl.Result{}, nil
 	}
 
 	jobRequestState := r.calculateState(ctx, jobRequest)
-	r.Log.Info("[JobRequestReconciler] Calculated state.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequestState)
+	r.Log.Info(
+		"[JobRequestReconciler] Calculated state for JobRequest.",
+		"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequestState,
+	)
 
 	result, err := r.handleState(ctx, jobRequestState, jobRequest, jobTemplate, req.NamespacedName)
 	if err != nil {
-		r.Log.Error(err, "[JobRequestReconciler] Error handling state. Reconcile will try again.", "name", jobRequest.Name, "namespace", jobRequest.Namespace)
+		r.Log.Error(err,
+			"[JobRequestReconciler] Error handling state for JobRequest. Reconcile will try again.",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "calculatedState", jobRequestState,
+		)
 		return result, err
 	}
 
-	r.Log.Info("[JobRequestReconciler] Handle state successful. Ending reconciliation.", "name", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequest.Status.State)
+	r.Log.Info(
+		"[JobRequestReconciler] Handled state of JobRequest successful. Ending reconciliation.",
+		"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequest.Status.State,
+	)
 	return result, nil
 }
 
 func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context, jobRequest *platformv1.JobRequest) bool {
 	requestedBy, err := jobRequest.GetRequestedBy()
 	if err != nil {
-		r.Log.Error(err, "Missing requested-by field")
+		r.Log.Error(err,
+			"[JobRequestReconciler] JobRequest Missing requested-by field",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
+		)
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
 		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 		return false
@@ -140,7 +183,10 @@ func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context
 
 	_, err = platformv1.ParseUserIdentityFromARN(requestedBy)
 	if err != nil {
-		r.Log.Error(err, "Invalid requested-by field")
+		r.Log.Error(err,
+			"[JobRequestReconciler] JobRequest has invalid requested-by field",
+			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "requestedBy", requestedBy,
+		)
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
 		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 		return false
@@ -154,12 +200,14 @@ func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName 
 	if err != nil {
 		var errorLogMessage string
 		if apierrors.IsNotFound(err) {
-			errorLogMessage = "JobRequest resource not found. This is usually because the resource was deleted or not created. Ignoring and ending reconciliation"
+			errorLogMessage = "[JobRequestReconciler] JobRequest resource not found. " +
+				"This is usually because the resource was deleted or not created. " +
+				"Ignoring and ending reconciliation"
 		} else {
-			errorLogMessage = "Failed to deserialize JobRequest. Ignoring and ending reconciliation"
+			errorLogMessage = "[JobRequestReconciler] Failed to deserialize JobRequest. Ignoring and ending reconciliation"
 		}
 
-		r.Log.Error(err, errorLogMessage)
+		r.Log.Error(err, errorLogMessage, "jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace)
 		return false
 	}
 	return true
