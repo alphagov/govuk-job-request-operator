@@ -674,6 +674,27 @@ var _ = Describe("JobRequest Pruning", Ordered, ContinueOnFailure, func() {
 			Recorder:        events.NewFakeRecorder(10),
 			Log:             log.Log,
 			ResourceTtl:     resourceTtl,
+			CustomMetrics: RequestCustomMetrics{
+				ReceivedTotal:                      prommetrics.JobRequestReceivedTotal,
+				RequeueTotal:                       prommetrics.JobRequestRequeueTotal,
+				SuccessfulReconcileTotal:           prommetrics.JobRequestSuccessfulReconcileTotal,
+				ErrorGetJobRequestTotal:            prommetrics.JobRequestErrorGetTotal,
+				ErrorAlreadyDeletedJobRequestTotal: prommetrics.JobRequestErrorAlreadyDeletedTotal,
+				ErrorDeletingJobRequestByTtlTotal:  prommetrics.JobRequestErrorDeletingByTtlTotal,
+				DeletedJobRequestByTtlTotal:        prommetrics.JobRequestDeletedByTtlTotal,
+				AlreadyInTerminalStateTotal:        prommetrics.JobRequestAlreadyInTerminalStateTotal,
+				ErrorRequestedByAnnoTotal:          prommetrics.JobRequestErrorRequestedByAnnoTotal,
+				NoneFoundTargetResourceTotal:       prommetrics.JobRequestNoneFoundTargetResourceTotal,
+				ErrorCreateJobTotalCounterTotal:    prommetrics.JobRequestErrorCreateJobTotal,
+				PendingStateTotal:                  prommetrics.JobRequestPendingStateTotal,
+				ApprovedStateTotal:                 prommetrics.JobRequestApprovedStateTotal,
+				RejectedStateTotal:                 prommetrics.JobRequestRejectedStateTotal,
+				StartedStateTotal:                  prommetrics.JobRequestStartedStateTotal,
+				MalformedStateTotal:                prommetrics.JobRequestMalformedStateTotal,
+				JobCompleteStateTotal:              prommetrics.JobRequestJobCompleteStateTotal,
+				JobFailedStateTotal:                prommetrics.JobRequestJobFailedStateTotal,
+				TimeTilReview:                      prommetrics.JobRequestTimeTilReview,
+			},
 		}
 	}
 
