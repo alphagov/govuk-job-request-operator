@@ -90,7 +90,7 @@ type JobRequestReconciler struct {
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequest := &platformv1.JobRequest{}
 	r.CustomMetrics.MetricLabels = prometheus.Labels{
-		"namespaced_name": req.NamespacedName.String(),
+		"namespaced_name": req.Namespace + "/" + req.Name,
 		"state":           "",
 	}
 
