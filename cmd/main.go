@@ -29,49 +29,16 @@ import (
 	"os"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	"github.com/alphagov/govuk-job-request-operator/internal/controller"
 	// +kubebuilder:scaffold:imports
 )
-
-var (
-	scheme                  = runtime.NewScheme()
-	setupLog                = ctrl.Log.WithName("setup")
-	jobRequestReceivedTotal = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "job_request_total_received",
-			Help: "Total number of job_requests received",
-		},
-	)
-	jobRequestErrors = prometheus.NewCounter(
-		prometheus.CounterOpts{
-			Name: "job_request_errors_total",
-			Help: "Total number of job requests that errored",
-		},
-	)
-)
-
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	utilruntime.Must(platformv1.AddToScheme(scheme))
-
-	metrics.Registry.MustRegister(jobRequestReceivedTotal, jobRequestErrors)
-
-	// +kubebuilder:scaffold:scheme
-}
 
 // nolint:gocyclo
 func main() {
@@ -212,7 +179,27 @@ func main() {
 		Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 		Log:             mgr.GetLogger(),
 		ResourceTtl:     resourceTtl,
-		CustomMetrics:   controller.CustomMetrics{jobRequestTotal, jobRequestErrors},
+		CustomMetrics: controller.CustomMetrics{
+			ReceivedTotal:                      jobRequestReceivedTotal,
+			RequeueTotal:                       jobRequestRequeueTotal,
+			SuccessfulReconcileTotal:           jobRequestSuccessfulReconcileTotal,
+			ErrorGetJobRequestTotal:            jobRequestErrorGetTotal,
+			ErrorAlreadyDeletedJobRequestTotal: jobRequestErrorAlreadyDeletedTotal,
+			ErrorDeletingJobRequestByTtlTotal:  jobRequestErrorDeletingByTtlTotal,
+			DeletedJobRequestByTtlTotal:        jobRequestDeletedByTtlTotal,
+			AlreadyInTerminalStateTotal:        jobRequestAlreadyInTerminalStateTotal,
+			ErrorRequestedByAnnoTotal:          jobRequestErrorRequestedByAnnoTotal,
+			NoneFoundTargetResourceTotal:       jobRequestNoneFoundTargetResourceTotal,
+			ErrorCreateJobTotalCounterTotal:    jobRequestErrorCreateJobTotal,
+			PendingStateTotal:                  jobRequestPendingStateTotal,
+			ApprovedStateTotal:                 jobRequestApprovedStateTotal,
+			RejectedStateTotal:                 jobRequestRejectedStateTotal,
+			StartedStateTotal:                  jobRequestStartedStateTotal,
+			MalformedStateTotal:                jobRequestMalformedStateTotal,
+			JobCompleteStateTotal:              jobRequestJobCompleteStateTotal,
+			JobFailedStateTotal:                jobRequestJobFailedStateTotal,
+			TimeTilReview:                      jobRequestTimeTilReview,
+		},
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
