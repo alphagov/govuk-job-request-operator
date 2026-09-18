@@ -29,9 +29,6 @@ import (
 	"os"
 	"time"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -39,22 +36,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	"github.com/alphagov/govuk-job-request-operator/internal/controller"
+	prommetrics "github.com/alphagov/govuk-job-request-operator/internal/metrics"
 	// +kubebuilder:scaffold:imports
 )
-
-var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
-)
-
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	utilruntime.Must(platformv1.AddToScheme(scheme))
-	// +kubebuilder:scaffold:scheme
-}
 
 // nolint:gocyclo
 func main() {
@@ -195,6 +180,27 @@ func main() {
 		Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 		Log:             mgr.GetLogger(),
 		ResourceTtl:     resourceTtl,
+		CustomMetrics: controller.RequestCustomMetrics{
+			ReceivedTotal:                      prommetrics.JobRequestReceivedTotal,
+			RequeueTotal:                       prommetrics.JobRequestRequeueTotal,
+			SuccessfulReconcileTotal:           prommetrics.JobRequestSuccessfulReconcileTotal,
+			ErrorGetJobRequestTotal:            prommetrics.JobRequestErrorGetTotal,
+			ErrorAlreadyDeletedJobRequestTotal: prommetrics.JobRequestErrorAlreadyDeletedTotal,
+			ErrorDeletingJobRequestByTtlTotal:  prommetrics.JobRequestErrorDeletingByTtlTotal,
+			DeletedJobRequestByTtlTotal:        prommetrics.JobRequestDeletedByTtlTotal,
+			AlreadyInTerminalStateTotal:        prommetrics.JobRequestAlreadyInTerminalStateTotal,
+			ErrorRequestedByAnnoTotal:          prommetrics.JobRequestErrorRequestedByAnnoTotal,
+			NoneFoundTargetResourceTotal:       prommetrics.JobRequestNoneFoundTargetResourceTotal,
+			ErrorCreateJobTotalCounterTotal:    prommetrics.JobRequestErrorCreateJobTotal,
+			PendingStateTotal:                  prommetrics.JobRequestPendingStateTotal,
+			ApprovedStateTotal:                 prommetrics.JobRequestApprovedStateTotal,
+			RejectedStateTotal:                 prommetrics.JobRequestRejectedStateTotal,
+			StartedStateTotal:                  prommetrics.JobRequestStartedStateTotal,
+			MalformedStateTotal:                prommetrics.JobRequestMalformedStateTotal,
+			JobCompleteStateTotal:              prommetrics.JobRequestJobCompleteStateTotal,
+			JobFailedStateTotal:                prommetrics.JobRequestJobFailedStateTotal,
+			TimeTilReview:                      prommetrics.JobRequestTimeTilReview,
+		},
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequest")
 		os.Exit(1)
@@ -207,6 +213,24 @@ func main() {
 		Recorder:        mgr.GetEventRecorder("jobrequestreview-controller"),
 		Log:             mgr.GetLogger(),
 		ResourceTtl:     resourceTtl,
+		CustomMetrics: controller.ReviewCustomMetrics{
+			ReceivedTotal:            prommetrics.JobRequestReviewReceivedTotal,
+			RequeueTotal:             prommetrics.JobRequestReviewRequeueTotal,
+			ErrorGettingReviewTotal:  prommetrics.JobRequestReviewErrorGettingReviewTotal,
+			ErrorAlreadyDeletedTotal: prommetrics.JobRequestReviewErrorAlreadyDeletedTotal,
+			ErrorDeletingByTtlTotal:  prommetrics.JobRequestReviewErrorDeletingByTtlTotal,
+			DeletedByTtlTotal:        prommetrics.JobRequestReviewDeletedByTtlTotal,
+			AlreadyHasStateTotal:     prommetrics.JobRequestReviewAlreadyHasStateTotal,
+			ErrorReviewByAnnoTotal:   prommetrics.JobRequestReviewErrorReviewByAnnoTotal,
+			ErrorGettingRequestTotal: prommetrics.JobRequestReviewErrorGettingRequestTotal,
+			NoRequestFoundTotal:      prommetrics.JobRequestReviewNoRequestFoundTotal,
+			MalformedStateTotal:      prommetrics.JobRequestReviewMalformedStateTotal,
+			NotFoundStateTotal:       prommetrics.JobRequestReviewNotFoundStateTotal,
+			ConflictStateTotal:       prommetrics.JobRequestReviewConflictStateTotal,
+			ApprovedStateTotal:       prommetrics.JobRequestReviewApprovedStateTotal,
+			RejectedStateTotal:       prommetrics.JobRequestReviewRejectedStateTotal,
+			SuccessfulReconcile:      prommetrics.JobRequestReviewSuccessfulReconcileTotal,
+		},
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequestreview")
 		os.Exit(1)

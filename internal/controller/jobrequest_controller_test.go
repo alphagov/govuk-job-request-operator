@@ -32,8 +32,6 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 
-	"k8s.io/utils/ptr"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -51,6 +49,7 @@ import (
 	log "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
+	prommetrics "github.com/alphagov/govuk-job-request-operator/internal/metrics"
 )
 
 const defaultTestResourceTtl = 720 * time.Hour
@@ -108,6 +107,27 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				Scheme:          mgr.GetScheme(),
 				Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 				ResourceTtl:     defaultTestResourceTtl,
+				CustomMetrics: RequestCustomMetrics{
+					ReceivedTotal:                      prommetrics.JobRequestReceivedTotal,
+					RequeueTotal:                       prommetrics.JobRequestRequeueTotal,
+					SuccessfulReconcileTotal:           prommetrics.JobRequestSuccessfulReconcileTotal,
+					ErrorGetJobRequestTotal:            prommetrics.JobRequestErrorGetTotal,
+					ErrorAlreadyDeletedJobRequestTotal: prommetrics.JobRequestErrorAlreadyDeletedTotal,
+					ErrorDeletingJobRequestByTtlTotal:  prommetrics.JobRequestErrorDeletingByTtlTotal,
+					DeletedJobRequestByTtlTotal:        prommetrics.JobRequestDeletedByTtlTotal,
+					AlreadyInTerminalStateTotal:        prommetrics.JobRequestAlreadyInTerminalStateTotal,
+					ErrorRequestedByAnnoTotal:          prommetrics.JobRequestErrorRequestedByAnnoTotal,
+					NoneFoundTargetResourceTotal:       prommetrics.JobRequestNoneFoundTargetResourceTotal,
+					ErrorCreateJobTotalCounterTotal:    prommetrics.JobRequestErrorCreateJobTotal,
+					PendingStateTotal:                  prommetrics.JobRequestPendingStateTotal,
+					ApprovedStateTotal:                 prommetrics.JobRequestApprovedStateTotal,
+					RejectedStateTotal:                 prommetrics.JobRequestRejectedStateTotal,
+					StartedStateTotal:                  prommetrics.JobRequestStartedStateTotal,
+					MalformedStateTotal:                prommetrics.JobRequestMalformedStateTotal,
+					JobCompleteStateTotal:              prommetrics.JobRequestJobCompleteStateTotal,
+					JobFailedStateTotal:                prommetrics.JobRequestJobFailedStateTotal,
+					TimeTilReview:                      prommetrics.JobRequestTimeTilReview,
+				},
 			}).SetupControllerWithManager(mgr)
 
 			go func() {
@@ -212,19 +232,19 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				g.Expect(jobList.Items).To(HaveLen(1))
 				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
 				g.Expect(jobList.Items[0].GetNamespace()).To(Equal(appNamespaceName))
-				g.Expect(jobList.Items[0].Spec.BackoffLimit).To(Equal(ptr.To(int32(0))))
+				g.Expect(jobList.Items[0].Spec.BackoffLimit).To(Equal(new(int32(0))))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Name).To(Equal("foo"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers).To(HaveLen(1))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Image).To(Equal("foo/bar"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("foo"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("bar"))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(ptr.To(false)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(new(false)))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop[0]).To(BeEquivalentTo("all"))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem).To(Equal(ptr.To(true)))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(Equal(ptr.To(true)))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(Equal(ptr.To(int64(1001))))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsGroup).To(Equal(ptr.To(int64(1001))))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(ptr.To(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem).To(Equal(new(true)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(Equal(new(true)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(Equal(new(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsGroup).To(Equal(new(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(new(int64(1001))))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(BeEquivalentTo("RuntimeDefault"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
 				g.Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
@@ -328,7 +348,7 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 			jobTemplatePodSpec.Spec.Containers = targetResource.Spec.Template.Spec.Containers
 			jobTemplatePodSpec.Spec.RestartPolicy = v1.RestartPolicyNever
 			job.Spec.Template = jobTemplatePodSpec
-			job.Spec.BackoffLimit = ptr.To(int32(0))
+			job.Spec.BackoffLimit = new(int32(0))
 			maps.Copy(job.Annotations, targetResource.Annotations)
 			maps.Copy(job.Labels, targetResource.Labels)
 			_ = ctrl.SetControllerReference(jobRequest, job, scheme)
@@ -396,19 +416,19 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				g.Expect(jobList.Items).To(HaveLen(1))
 				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
 				g.Expect(jobList.Items[0].GetNamespace()).To(Equal(appNamespaceName))
-				g.Expect(jobList.Items[0].Spec.BackoffLimit).To(Equal(ptr.To(int32(0))))
+				g.Expect(jobList.Items[0].Spec.BackoffLimit).To(Equal(new(int32(0))))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Name).To(Equal("foo"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers).To(HaveLen(1))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Image).To(Equal("foo/bar"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Name).To(Equal("foo"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].Env[0].Value).To(Equal("bar"))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(ptr.To(false)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(new(false)))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.Capabilities.Drop[0]).To(BeEquivalentTo("all"))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem).To(Equal(ptr.To(true)))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(Equal(ptr.To(true)))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(Equal(ptr.To(int64(1001))))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsGroup).To(Equal(ptr.To(int64(1001))))
-				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(ptr.To(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.Containers[0].SecurityContext.ReadOnlyRootFilesystem).To(Equal(new(true)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsNonRoot).To(Equal(new(true)))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsUser).To(Equal(new(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.RunAsGroup).To(Equal(new(int64(1001))))
+				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(new(int64(1001))))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(BeEquivalentTo("RuntimeDefault"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
 				g.Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
@@ -654,6 +674,27 @@ var _ = Describe("JobRequest Pruning", Ordered, ContinueOnFailure, func() {
 			Recorder:        events.NewFakeRecorder(10),
 			Log:             log.Log,
 			ResourceTtl:     resourceTtl,
+			CustomMetrics: RequestCustomMetrics{
+				ReceivedTotal:                      prommetrics.JobRequestReceivedTotal,
+				RequeueTotal:                       prommetrics.JobRequestRequeueTotal,
+				SuccessfulReconcileTotal:           prommetrics.JobRequestSuccessfulReconcileTotal,
+				ErrorGetJobRequestTotal:            prommetrics.JobRequestErrorGetTotal,
+				ErrorAlreadyDeletedJobRequestTotal: prommetrics.JobRequestErrorAlreadyDeletedTotal,
+				ErrorDeletingJobRequestByTtlTotal:  prommetrics.JobRequestErrorDeletingByTtlTotal,
+				DeletedJobRequestByTtlTotal:        prommetrics.JobRequestDeletedByTtlTotal,
+				AlreadyInTerminalStateTotal:        prommetrics.JobRequestAlreadyInTerminalStateTotal,
+				ErrorRequestedByAnnoTotal:          prommetrics.JobRequestErrorRequestedByAnnoTotal,
+				NoneFoundTargetResourceTotal:       prommetrics.JobRequestNoneFoundTargetResourceTotal,
+				ErrorCreateJobTotalCounterTotal:    prommetrics.JobRequestErrorCreateJobTotal,
+				PendingStateTotal:                  prommetrics.JobRequestPendingStateTotal,
+				ApprovedStateTotal:                 prommetrics.JobRequestApprovedStateTotal,
+				RejectedStateTotal:                 prommetrics.JobRequestRejectedStateTotal,
+				StartedStateTotal:                  prommetrics.JobRequestStartedStateTotal,
+				MalformedStateTotal:                prommetrics.JobRequestMalformedStateTotal,
+				JobCompleteStateTotal:              prommetrics.JobRequestJobCompleteStateTotal,
+				JobFailedStateTotal:                prommetrics.JobRequestJobFailedStateTotal,
+				TimeTilReview:                      prommetrics.JobRequestTimeTilReview,
+			},
 		}
 	}
 
@@ -781,7 +822,7 @@ func SetupJobRequestForPruneTest(ctx context.Context, pruneTestCase PruneTestCas
 		jobTemplatePodSpec.Spec.Containers = targetResource.Spec.Template.Spec.Containers
 		jobTemplatePodSpec.Spec.RestartPolicy = v1.RestartPolicyNever
 		job.Spec.Template = jobTemplatePodSpec
-		job.Spec.BackoffLimit = ptr.To(int32(0))
+		job.Spec.BackoffLimit = new(int32(0))
 		maps.Copy(job.Annotations, targetResource.Annotations)
 		maps.Copy(job.Labels, targetResource.Labels)
 		_ = ctrl.SetControllerReference(jobRequest, job, scheme)
