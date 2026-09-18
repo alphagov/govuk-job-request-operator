@@ -179,7 +179,7 @@ func main() {
 		Recorder:        mgr.GetEventRecorder("jobrequest-controller"),
 		Log:             mgr.GetLogger(),
 		ResourceTtl:     resourceTtl,
-		CustomMetrics: controller.CustomMetrics{
+		CustomMetrics: controller.RequestCustomMetrics{
 			ReceivedTotal:                      jobRequestReceivedTotal,
 			RequeueTotal:                       jobRequestRequeueTotal,
 			SuccessfulReconcileTotal:           jobRequestSuccessfulReconcileTotal,
@@ -212,6 +212,24 @@ func main() {
 		Recorder:        mgr.GetEventRecorder("jobrequestreview-controller"),
 		Log:             mgr.GetLogger(),
 		ResourceTtl:     resourceTtl,
+		CustomMetrics: controller.ReviewCustomMetrics{
+			ReceivedTotal:            jobRequestReviewReceivedTotal,
+			RequeueTotal:             jobRequestReviewRequeueTotal,
+			ErrorGettingReviewTotal:  jobRequestReviewErrorGettingReviewTotal,
+			ErrorAlreadyDeletedTotal: jobRequestReviewErrorAlreadyDeletedTotal,
+			ErrorDeletingByTtlTotal:  jobRequestReviewErrorDeletingByTtlTotal,
+			DeletedByTtlTotal:        jobRequestReviewDeletedByTtlTotal,
+			AlreadyHasStateTotal:     jobRequestReviewAlreadyHasStateTotal,
+			ErrorReviewByAnnoTotal:   jobRequestReviewErrorReviewByAnnoTotal,
+			ErrorGettingRequestTotal: jobRequestReviewErrorGettingRequestTotal,
+			NoRequestFoundTotal:      jobRequestReviewNoRequestFoundTotal,
+			MalformedStateTotal:      jobRequestReviewMalformedStateTotal,
+			NotFoundStateTotal:       jobRequestReviewNotFoundStateTotal,
+			ConflictStateTotal:       jobRequestReviewConflictStateTotal,
+			ApprovedStateTotal:       jobRequestReviewApprovedStateTotal,
+			RejectedStateTotal:       jobRequestReviewRejectedStateTotal,
+			SuccessfulReconcile:      jobRequestReviewSuccessfulReconcileTotal,
+		},
 	}).SetupControllerWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "jobrequestreview")
 		os.Exit(1)

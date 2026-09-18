@@ -40,6 +40,22 @@ func init() {
 		jobRequestJobCompleteStateTotal,
 		jobRequestJobFailedStateTotal,
 		jobRequestTimeTilReview,
+		jobRequestReviewReceivedTotal,
+		jobRequestReviewRequeueTotal,
+		jobRequestReviewErrorGettingReviewTotal,
+		jobRequestReviewErrorAlreadyDeletedTotal,
+		jobRequestReviewErrorDeletingByTtlTotal,
+		jobRequestReviewDeletedByTtlTotal,
+		jobRequestReviewAlreadyHasStateTotal,
+		jobRequestReviewErrorReviewByAnnoTotal,
+		jobRequestReviewErrorGettingRequestTotal,
+		jobRequestReviewNoRequestFoundTotal,
+		jobRequestReviewMalformedStateTotal,
+		jobRequestReviewNotFoundStateTotal,
+		jobRequestReviewConflictStateTotal,
+		jobRequestReviewApprovedStateTotal,
+		jobRequestReviewRejectedStateTotal,
+		jobRequestReviewSuccessfulReconcileTotal,
 	)
 
 	// +kubebuilder:scaffold:scheme

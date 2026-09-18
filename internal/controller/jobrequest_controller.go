@@ -230,7 +230,7 @@ func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
 		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestMalformed)
-		r.CustomMetrics.MalformedStateTotal.With(r.MetricLabels).Inc()
+		r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return false
 	}
 
