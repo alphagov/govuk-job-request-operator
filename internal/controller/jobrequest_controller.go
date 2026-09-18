@@ -91,6 +91,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	jobRequest := &platformv1.JobRequest{}
 	r.CustomMetrics.MetricLabels = prometheus.Labels{
 		"namespaced_name": req.NamespacedName.String(),
+		"state":           "",
 	}
 
 	r.Log.Info("[JobRequestReconciler] Received JobRequest", "jobRequestName", req.Name, "namespace", req.Namespace)
@@ -140,6 +141,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		r.Log.Info(
 			"[JobRequestReconciler] JobRequest deleted after expired ttl. Ending reconciliation.",
 			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
+		)
 		r.CustomMetrics.DeletedJobRequestByTtlTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
@@ -454,6 +456,11 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 
 		for _, v := range job.Status.Conditions {
 			if (v.Type == batch.JobComplete || v.Type == batch.JobFailed) && v.Status == "True" {
+				// If JobRequest state is already in Complete or Failed don't emit the event
+				if string(jobRequest.Status.State) != string(v.Type) {
+					r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, string(v.Type), "None", "Job is "+string(v.Type))
+				}
+
 				switch v.Type {
 				case batch.JobComplete:
 					r.setState(ctx, jobRequest, platformv1.JobRequestComplete)
@@ -463,11 +470,6 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 					r.setState(ctx, jobRequest, platformv1.JobRequestFailed)
 					r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestFailed)
 					r.CustomMetrics.JobFailedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
-				}
-
-				// If JobRequest state is already in Complete or Failed don't emit the event
-				if string(jobRequest.Status.State) != string(v.Type) {
-					r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, string(v.Type), "None", "Job is "+string(v.Type))
 				}
 			}
 		}

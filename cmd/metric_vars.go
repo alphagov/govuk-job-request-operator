@@ -39,7 +39,7 @@ var (
 		},
 		[]string{"namespaced_name", "state"},
 	)
-	jobRequestErrorDeletingTtlTotal = prometheus.NewCounterVec(
+	jobRequestErrorDeletingByTtlTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "job_request_error_deleting_ttl_total",
 			Help: "Total number of errors deleting job requests due to TTL",

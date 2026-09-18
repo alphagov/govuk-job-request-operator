@@ -26,7 +26,7 @@ func init() {
 		jobRequestSuccessfulReconcileTotal,
 		jobRequestErrorGetTotal,
 		jobRequestErrorAlreadyDeletedTotal,
-		jobRequestErrorDeletingTtlTotal,
+		jobRequestErrorDeletingByTtlTotal,
 		jobRequestDeletedByTtlTotal,
 		jobRequestAlreadyInTerminalStateTotal,
 		jobRequestErrorRequestedByAnnoTotal,
