@@ -44,6 +44,7 @@ import (
 	log "sigs.k8s.io/controller-runtime/pkg/log"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
+	prommetrics "github.com/alphagov/govuk-job-request-operator/internal/metrics"
 )
 
 var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func() {
@@ -91,6 +92,24 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 				Scheme:          mgr.GetScheme(),
 				Recorder:        mgr.GetEventRecorder("jobrequestreview-controller"),
 				ResourceTtl:     defaultTestResourceTtl,
+				CustomMetrics: ReviewCustomMetrics{
+					ReceivedTotal:            prommetrics.JobRequestReviewReceivedTotal,
+					RequeueTotal:             prommetrics.JobRequestReviewRequeueTotal,
+					ErrorGettingReviewTotal:  prommetrics.JobRequestReviewErrorGettingReviewTotal,
+					ErrorAlreadyDeletedTotal: prommetrics.JobRequestReviewErrorAlreadyDeletedTotal,
+					ErrorDeletingByTtlTotal:  prommetrics.JobRequestReviewErrorDeletingByTtlTotal,
+					DeletedByTtlTotal:        prommetrics.JobRequestReviewDeletedByTtlTotal,
+					AlreadyHasStateTotal:     prommetrics.JobRequestReviewAlreadyHasStateTotal,
+					ErrorReviewByAnnoTotal:   prommetrics.JobRequestReviewErrorReviewByAnnoTotal,
+					ErrorGettingRequestTotal: prommetrics.JobRequestReviewErrorGettingRequestTotal,
+					NoRequestFoundTotal:      prommetrics.JobRequestReviewNoRequestFoundTotal,
+					MalformedStateTotal:      prommetrics.JobRequestReviewMalformedStateTotal,
+					NotFoundStateTotal:       prommetrics.JobRequestReviewNotFoundStateTotal,
+					ConflictStateTotal:       prommetrics.JobRequestReviewConflictStateTotal,
+					ApprovedStateTotal:       prommetrics.JobRequestReviewApprovedStateTotal,
+					RejectedStateTotal:       prommetrics.JobRequestReviewRejectedStateTotal,
+					SuccessfulReconcile:      prommetrics.JobRequestReviewSuccessfulReconcileTotal,
+				},
 			}).SetupControllerWithManager(mgr)
 
 			go func() {
@@ -159,7 +178,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			}).Should(Succeed())
 		})
 
-		It("should successfully reconcile if the corresponding JobRequest status is initally empty", func(ctx context.Context) {
+		It("should successfully reconcile if the corresponding JobRequest status is initially empty", func(ctx context.Context) {
 			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
 
@@ -324,9 +343,9 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 					g.Expect(jobRequest.Status.State).To(Equal(expectedJRStatus))
 				}).Should(Succeed())
 			},
-			Entry("when the reviewed-by annotation is not an ARN the JobRequestReivew should become Malformed",
+			Entry("when the reviewed-by annotation is not an ARN the JobRequestReview should become Malformed",
 				"wibble", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
-			Entry("when the reviewed-by-annotation is not an assumed-role the JobRequestReivew should become Malformed",
+			Entry("when the reviewed-by-annotation is not an assumed-role the JobRequestReview should become Malformed",
 				"arn:aws:sts::123456789012:user/joe.blogs", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
 			Entry("when the reviewed-by-annotation is not a valid gds-users role or EntraID user the JobRequestReview should become Malformed",
 				"arn:aws:sts::123456789012:assumed-role/foo/bar", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
