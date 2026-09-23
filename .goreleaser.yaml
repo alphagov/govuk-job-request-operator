@@ -9,9 +9,8 @@ before:
     - make controller-gen
     - bin/controller-gen rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=crds
 
-
 builds:
-  - main: cmd/main.go
+  - main: cmd/
     env:
       - CGO_ENABLED=0
     goos:
