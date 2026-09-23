@@ -5,7 +5,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 )
 
 func jobRequestBuilder(jobRequestName, resourceName, resourceNamespace, containerName string) *platformv1.JobRequest {
@@ -78,10 +77,10 @@ func deploymentBuilder(resourceName, resourceNamespace string) *appsv1.Deploymen
 				Spec: v1.PodSpec{
 					RestartPolicy: "Always",
 					SecurityContext: &v1.PodSecurityContext{
-						RunAsUser:    ptr.To(int64(1001)),
-						RunAsGroup:   ptr.To(int64(1001)),
-						FSGroup:      ptr.To(int64(1001)),
-						RunAsNonRoot: ptr.To(true),
+						RunAsUser:    new(int64(1001)),
+						RunAsGroup:   new(int64(1001)),
+						FSGroup:      new(int64(1001)),
+						RunAsNonRoot: new(true),
 						SeccompProfile: &v1.SeccompProfile{
 							Type: "RuntimeDefault",
 						},
@@ -97,13 +96,13 @@ func deploymentBuilder(resourceName, resourceNamespace string) *appsv1.Deploymen
 								},
 							},
 							SecurityContext: &v1.SecurityContext{
-								AllowPrivilegeEscalation: ptr.To(false),
+								AllowPrivilegeEscalation: new(false),
 								Capabilities: &v1.Capabilities{
 									Drop: []v1.Capability{
 										"all",
 									},
 								},
-								ReadOnlyRootFilesystem: ptr.To(true),
+								ReadOnlyRootFilesystem: new(true),
 							},
 						},
 					},

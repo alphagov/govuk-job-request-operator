@@ -59,17 +59,19 @@ const metricsServiceName = "govuk-job-request-operator-controller-manager-metric
 const metricsRoleBindingName = "govuk-job-request-operator-metrics-binding"
 
 // fixtures
-const govukReplatformTestAppDeployment = "govukReplatformTestApp.yaml"
-const jobRequestForSuccessfulJob = "jobRequestForSuccessfulJob.yaml"
-const jobRequestWithAnnotation = "jobRequestWithAnnotation.yaml"
-const jobRequestWithoutAnnotation = "jobRequestWithoutAnnotation.yaml"
-const jobRequestForFailedJob = "jobRequestForFailedJob.yaml"
-const jobRequestForSecondJob = "jobRequestForSecondJob.yaml"
-const jobRequestReviewApproved = "jobRequestReviewApproved.yaml"
-const jobRequestReviewRejected = "jobRequestReviewRejected.yaml"
-const jobRequestReviewRejectedForSecondJob = "jobRequestReviewRejectedForSecondJob.yaml"
-const jobRequestReviewWithAnnotation = "jobRequestReviewWithAnnotation.yaml"
-const jobRequestReviewWithoutAnnotation = "jobRequestReviewWithoutAnnotation.yaml"
+const (
+	govukReplatformTestAppDeployment     = "govukReplatformTestApp.yaml"
+	jobRequestForSuccessfulJob           = "jobRequestForSuccessfulJob.yaml"
+	jobRequestWithAnnotation             = "jobRequestWithAnnotation.yaml"
+	jobRequestWithoutAnnotation          = "jobRequestWithoutAnnotation.yaml"
+	jobRequestForFailedJob               = "jobRequestForFailedJob.yaml"
+	jobRequestForSecondJob               = "jobRequestForSecondJob.yaml"
+	jobRequestReviewApproved             = "jobRequestReviewApproved.yaml"
+	jobRequestReviewRejected             = "jobRequestReviewRejected.yaml"
+	jobRequestReviewRejectedForSecondJob = "jobRequestReviewRejectedForSecondJob.yaml"
+	jobRequestReviewWithAnnotation       = "jobRequestReviewWithAnnotation.yaml"
+	jobRequestReviewWithoutAnnotation    = "jobRequestReviewWithoutAnnotation.yaml"
+)
 
 var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	var controllerPodName string
@@ -327,6 +329,8 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred(), "Failed to retrieve logs from curl pod")
 				g.Expect(metricsOutput).NotTo(BeEmpty())
 				g.Expect(metricsOutput).To(ContainSubstring("< HTTP/1.1 200 OK"))
+				g.Expect(metricsOutput).To(ContainSubstring("job_request_received_total"))
+				g.Expect(metricsOutput).To(ContainSubstring("job_request_review_received_total"))
 			}
 			Eventually(ctx, verifyMetricsAvailable).Should(Succeed())
 		})
@@ -467,7 +471,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
 				}
 				Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
-
 			})
 
 			It("should set the correct JobRequest to Rejected if a JobRequestReview is created to reject it", func(ctx context.Context) {
@@ -1158,7 +1161,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
-
 	})
 })
 
