@@ -41,6 +41,8 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+var setupLog = ctrl.Log.WithName("setup")
+
 // nolint:gocyclo
 func main() {
 	var metricsAddr string
