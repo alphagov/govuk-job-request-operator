@@ -94,7 +94,11 @@ coverage_report: # coverage_report is invoked by the re-usable go-test workflow 
 
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	go test -tags=e2e ./test/e2e/ -v -race -ginkgo.v
+	go test -tags=e2e ./test/e2e/ -run TestE2E -v -race -ginkgo.v
+
+.PHONY: smoke
+smoke: manifests generate fmt vet ## Run the smoke tests.
+	SMOKE_TEST_ENABLED=true go test -tags=smoke ./test/e2e/ -run TestSmokeE2E -v -race -ginkgo.v -ginkgo.skip="when checking manager health"
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter

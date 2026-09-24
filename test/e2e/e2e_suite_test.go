@@ -43,43 +43,40 @@ import (
 	"github.com/alphagov/govuk-job-request-operator/test/utils"
 )
 
-type ClusterUsers []*ClusterUser
-
-type ClusterUser struct {
-	Name                string
-	ARN                 string
-	KubectlUserName     string
-	Base64EncodedCSR    string
-	KeyFilePath         string
-	CSRFilePath         string
-	CSRManifestPath     string
-	CertificateFilePath string
-}
-
 var (
-	// managerImage is the manager image to be built and loaded for testing.
-	managerImage = "ghcr.io/alphagov/govuk/govuk-job-request-operator:v0.0.1"
-	// kindCluster is the name of the Kind cluster to be used for testing.
-	kindCluster = utils.DefaultKindCluster
-	// shouldCleanupCertManager tracks whether CertManager was installed by this suite.
-	shouldCleanupCertManager = false
-	// govukReplatformTestAppImage is the image used for testing
-	govukReplatformTestAppImage = "ghcr.io/alphagov/govuk/govuk-replatform-test-app:v48"
 	// JobRequesterUser is the user to use for creating JobRequest resources
-	JobRequesterUser = &ClusterUser{
+	JobRequesterUser = &utils.ClusterUser{
 		Name: "job-requester",
 		ARN:  "arn:aws:sts::123456789012:assumed-role/job.req-developer/e2e",
 	}
 	// JobReviewerUser is the user to use for creating JobRequestReview resources
-	JobReviewerUser = &ClusterUser{
+	JobReviewerUser = &utils.ClusterUser{
 		Name: "job-reviewer",
 		ARN:  "arn:aws:sts::123456789012:assumed-role/job.rev-developer/e2e",
 	}
 	// KubernetesUsers will have kubernetes users provisioned into the cluster. Only Name and ARN need to be specified
-	KubernetesUsers = &ClusterUsers{
+	KubernetesUsers = &utils.ClusterUsers{
 		JobRequesterUser,
 		JobReviewerUser,
 	}
+	// shouldCleanupCertManager tracks whether CertManager was installed by this suite.
+	shouldCleanupCertManager = false
+)
+
+const (
+	// managerImage is the manager image to be built and loaded for testing.
+	managerImage = "ghcr.io/alphagov/govuk/govuk-job-request-operator:v0.0.1"
+	// kindCluster is the name of the Kind cluster to be used for testing.
+	kindCluster = utils.DefaultKindCluster
+	// govukReplatformTestAppImage is the image used for testing
+	govukReplatformTestAppImage = "ghcr.io/alphagov/govuk/govuk-replatform-test-app:v48"
+	// namespace where resources are deployed in
+	appNamespace = "apps"
+	// namespace where the operator is deployed in
+	controllerNamespace = "govuk-job-request-operator-system"
+	// Set these to empty strings to disable impersonation for e2e tests
+	jobRequestImpersonateUser = ""
+	jobReviewImpersonateUser  = ""
 )
 
 // To skip CertManager installation, set: CERT_MANAGER_INSTALL_SKIP=true
@@ -118,14 +115,73 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	Expect(err).NotTo(HaveOccurred(), "Failed to load the govuk-replatform-test-app image into Kind")
 
 	setupCertManager(ctx)
+
+	By("creating manager namespace")
+	cmd = exec.CommandContext(ctx, "kubectl", "create", "ns", controllerNamespace)
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
+
+	By("labeling the namespace to enforce the restricted security policy")
+	cmd = exec.CommandContext(ctx, "kubectl", "label", "--overwrite", "ns", controllerNamespace,
+		"pod-security.kubernetes.io/enforce=restricted")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to label namespace with restricted policy")
+
+	By("installing CRDs")
+	cmd = exec.CommandContext(ctx, "make", "install")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to install CRDs")
+
+	By("waiting for CRDs to become available")
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx, "kubectl", "get", "--raw", "/apis/platform.publishing.service.gov.uk/v1")
+		_, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+	}).Should(Succeed())
+
+	By("deploying the controller-manager")
+	cmd = exec.CommandContext(ctx, "make", "deploy", fmt.Sprintf("IMG=%s", managerImage))
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to deploy the controller-manager")
+
+	By("creating apps namespace")
+	cmd = exec.CommandContext(ctx, "kubectl", "create", "ns", appNamespace)
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to create apps namespace")
+
+	By("labeling the apps namespace to enforce the restricted security policy")
+	cmd = exec.CommandContext(ctx, "kubectl", "label", "--overwrite", "ns", appNamespace,
+		"pod-security.kubernetes.io/enforce=restricted")
+	_, err = utils.Run(cmd)
+	Expect(err).NotTo(HaveOccurred(), "Failed to label apps namespace with restricted policy")
 })
 
 var _ = AfterSuite(func(ctx context.Context) {
+	By("cleaning up the curl pod for metrics")
+	cmd := exec.CommandContext(ctx, "kubectl", "delete", "pod", "curl-metrics", "-n", controllerNamespace)
+	_, _ = utils.Run(cmd)
+
+	By("removing apps namespace")
+	cmd = exec.CommandContext(ctx, "kubectl", "delete", "ns", appNamespace)
+	_, _ = utils.Run(cmd)
+
+	By("undeploying the controller-manager")
+	cmd = exec.CommandContext(ctx, "make", "undeploy")
+	_, _ = utils.Run(cmd)
+
+	By("uninstalling CRDs")
+	cmd = exec.CommandContext(ctx, "make", "uninstall")
+	_, _ = utils.Run(cmd)
+
+	By("removing manager namespace")
+	cmd = exec.CommandContext(ctx, "kubectl", "delete", "ns", controllerNamespace)
+	_, _ = utils.Run(cmd)
+
 	By("deleting the kubernetes users from kubeconfig")
-	deleteKubernetesUsersFromKubeconfig(ctx)
+	utils.DeleteKubernetesUsersFromKubeconfig(ctx, KubernetesUsers)
 
 	By("deleting the Kind cluster")
-	cmd := exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", kindCluster)
+	cmd = exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", kindCluster)
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to delete Kind cluster")
 })
@@ -245,22 +301,6 @@ func setupUsers(ctx context.Context) {
 	Expect(err).NotTo(HaveOccurred(), "Failed to apply role binding manifest")
 }
 
-func SwitchToKubernetesAdminUser(ctx context.Context) {
-	By("switching to the kubernetes-admin user")
-	switchToUser(ctx, "kind-govuk-job-request-operator-test-e2e")
-}
-
-func SwitchToKubernetesUser(ctx context.Context, clusterUser *ClusterUser) {
-	By(fmt.Sprintf("switching to the %s user", clusterUser.Name))
-	switchToUser(ctx, clusterUser.KubectlUserName)
-}
-
-func switchToUser(ctx context.Context, kubectlUserName string) {
-	cmd := exec.CommandContext(ctx, "kubectl", "config", "set-context", "--current", "--user", kubectlUserName)
-	_, err := utils.Run(cmd)
-	Expect(err).NotTo(HaveOccurred())
-}
-
 func renderTemplate(templatePath, outputPath string, templateData any) {
 	templatePath, err := utils.RetrieveFixtureFilePath(templatePath)
 	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to retrieve fixture with path %s", templatePath))
@@ -274,15 +314,4 @@ func renderTemplate(templatePath, outputPath string, templateData any) {
 
 	parsedTemplate.Execute(fileWriter, templateData)
 	Expect(err).NotTo(HaveOccurred(), "Failed executing template")
-}
-
-func deleteKubernetesUsersFromKubeconfig(ctx context.Context) {
-	for _, user := range *KubernetesUsers {
-		cmd := exec.CommandContext(ctx, "kubectl", "config", "delete-user", user.KubectlUserName)
-		_, err := utils.Run(cmd)
-		// This is only called in shutdown, and we don't want to fail the suite shutdown if this errors, so don't Expect success
-		if err != nil {
-			fmt.Printf("Failed to delete user %s from kubectl config", user.KubectlUserName)
-		}
-	}
 }

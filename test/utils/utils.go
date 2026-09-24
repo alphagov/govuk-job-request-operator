@@ -36,6 +36,19 @@ import (
 	. "github.com/onsi/ginkgo/v2" // nolint:revive,staticcheck
 )
 
+type ClusterUsers []*ClusterUser
+
+type ClusterUser struct {
+	Name                string
+	ARN                 string
+	KubectlUserName     string
+	Base64EncodedCSR    string
+	KeyFilePath         string
+	CSRFilePath         string
+	CSRManifestPath     string
+	CertificateFilePath string
+}
+
 const (
 	certmanagerVersion = "v1.21.1"
 	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
@@ -239,4 +252,15 @@ func UncommentCode(filename, target, prefix string) error {
 	}
 
 	return nil
+}
+
+func DeleteKubernetesUsersFromKubeconfig(ctx context.Context, kubernetesUsers *ClusterUsers) {
+	for _, user := range *kubernetesUsers {
+		cmd := exec.CommandContext(ctx, "kubectl", "config", "delete-user", user.KubectlUserName)
+		_, err := Run(cmd)
+		// This is only called in shutdown, and we don't want to fail the suite shutdown if this errors, so don't Expect success
+		if err != nil {
+			fmt.Printf("Failed to delete user %s from kubectl config", user.KubectlUserName)
+		}
+	}
 }
