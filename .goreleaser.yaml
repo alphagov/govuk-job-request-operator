@@ -10,7 +10,7 @@ before:
     - bin/controller-gen rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=crds
 
 builds:
-  - main: cmd/
+  - main: ./cmd
     env:
       - CGO_ENABLED=0
     goos:
