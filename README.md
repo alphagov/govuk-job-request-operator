@@ -230,6 +230,7 @@ The release process works as follows:
    4. Creates a GitHub Release with the packaged binary and creates a changelog based on commits since last release
    5. Builds a container image
 4. `make push-helm-chart` runs, which generates, packages and pushes the Helm chart
+5. Over in [govuk-helm-charts](https://github.com/alphagov/govuk-helm-charts/blob/main/charts/app-config/helm-versions/) update the helm-versions for each environment and argo will roll out the new versions
 
 ## Team
 

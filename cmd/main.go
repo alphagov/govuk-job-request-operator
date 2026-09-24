@@ -169,6 +169,16 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	if err := mgr.Add(&prommetrics.MetricCollector{
+		CacheClient:   mgr.GetClient(),
+		Interval:      30 * time.Second,
+		Log:           mgr.GetLogger(),
+		CustomMetrics: prommetrics.InitCollectorCustomMetrics(),
+	}); err != nil {
+		setupLog.Error(err, "Failed to set up metrics collector")
+		os.Exit(1)
+	}
+
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "Failed to set up health check")
 		os.Exit(1)

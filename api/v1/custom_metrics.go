@@ -46,3 +46,19 @@ type ReviewCustomMetrics struct {
 	SuccessfulReconcileTotal *prometheus.CounterVec
 	MetricLabels             prometheus.Labels
 }
+
+// +kubebuilder:object:generate=false
+type CollectorCustomMetrics struct {
+	RequestCurrentPendingTotal   prometheus.Gauge
+	RequestCurrentApprovedTotal  prometheus.Gauge
+	RequestCurrentRejectedTotal  prometheus.Gauge
+	RequestCurrentStartedTotal   prometheus.Gauge
+	RequestCurrentCompleteTotal  prometheus.Gauge
+	RequestCurrentFailedTotal    prometheus.Gauge
+	RequestCurrentMalformedTotal prometheus.Gauge
+	ReviewCurrentApprovedTotal   prometheus.Gauge
+	ReviewCurrentRejectedTotal   prometheus.Gauge
+	ReviewCurrentMalformedTotal  prometheus.Gauge
+	ReviewCurrentNotFoundTotal   prometheus.Gauge
+	ReviewCurrentConflictTotal   prometheus.Gauge
+}
