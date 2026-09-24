@@ -284,6 +284,8 @@ package-helm-chart: build-installer
 	
 	# patch values.yaml to point to GHCR by default
 	yq -i '.manager.image.repository = "ghcr.io/alphagov/govuk/govuk-job-request-operator"' dist/chart/values.yaml
+	# patch metrics.secure: false
+	yq -i '.metrics.secure = false' dist/chart/values.yaml
 	# patch Chart.yaml to set org.opencontainers.image.source
 	yq -i '.annotations."org.opencontainers.image.source" = "https://github.com/alphagov/govuk-job-request-operator"' dist/chart/Chart.yaml
 	CREATED_TIME=$$(date +%Y%m%dT%H:%M:%SZ) \
