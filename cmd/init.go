@@ -53,6 +53,18 @@ func init() {
 		prommetrics.JobRequestReviewApprovedStateTotal,
 		prommetrics.JobRequestReviewRejectedStateTotal,
 		prommetrics.JobRequestReviewSuccessfulReconcileTotal,
+		prommetrics.RequestCurrentPendingTotal,
+		prommetrics.RequestCurrentApprovedTotal,
+		prommetrics.RequestCurrentRejectedTotal,
+		prommetrics.RequestCurrentStartedTotal,
+		prommetrics.RequestCurrentCompleteTotal,
+		prommetrics.RequestCurrentFailedTotal,
+		prommetrics.RequestCurrentMalformedTotal,
+		prommetrics.ReviewCurrentApprovedTotal,
+		prommetrics.ReviewCurrentRejectedTotal,
+		prommetrics.ReviewCurrentMalformedTotal,
+		prommetrics.ReviewCurrentNotFoundTotal,
+		prommetrics.ReviewCurrentConflictTotal,
 	)
 
 	// +kubebuilder:scaffold:scheme
