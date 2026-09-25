@@ -46,3 +46,20 @@ func InitReviewCustomMetrics() platformv1.ReviewCustomMetrics {
 		SuccessfulReconcileTotal: JobRequestReviewSuccessfulReconcileTotal,
 	}
 }
+
+func InitCollectorCustomMetrics() platformv1.CollectorCustomMetrics {
+	return platformv1.CollectorCustomMetrics{
+		RequestCurrentPendingTotal:   RequestCurrentPendingTotal,
+		RequestCurrentApprovedTotal:  RequestCurrentApprovedTotal,
+		RequestCurrentRejectedTotal:  RequestCurrentRejectedTotal,
+		RequestCurrentStartedTotal:   RequestCurrentStartedTotal,
+		RequestCurrentCompleteTotal:  RequestCurrentCompleteTotal,
+		RequestCurrentFailedTotal:    RequestCurrentFailedTotal,
+		RequestCurrentMalformedTotal: RequestCurrentMalformedTotal,
+		ReviewCurrentApprovedTotal:   ReviewCurrentApprovedTotal,
+		ReviewCurrentRejectedTotal:   ReviewCurrentRejectedTotal,
+		ReviewCurrentMalformedTotal:  ReviewCurrentMalformedTotal,
+		ReviewCurrentNotFoundTotal:   ReviewCurrentNotFoundTotal,
+		ReviewCurrentConflictTotal:   ReviewCurrentConflictTotal,
+	}
+}
