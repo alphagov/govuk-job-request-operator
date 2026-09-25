@@ -97,7 +97,12 @@ brew install k3d
 We have some [recommended pre-commit hooks](.pre-commit-config.yaml). You need
 to [install `pre-commit`](https://pre-commit.com/#install) for these to run.
 
-### Create and generate the manifests
+
+### Run the controller locally
+
+The following steps will get the controller up inside a k3d cluster, the cluster name is `cluster`.
+
+#### Create and generate the manifests
 
 1. Create the manifests
 
@@ -117,7 +122,7 @@ k3d cluster create cluster --api-port 6550
 make install
 ```
 
-### Run the controller locally
+#### Run the controller locally
 
 1. Run the controller locally
 
@@ -127,7 +132,7 @@ This will run the controller locally and not in the cluster.
 make run
 ```
 
-### Run the controller in the cluster
+#### Run the controller in the cluster
 
 1. Build the controller in a docker image
 
@@ -154,6 +159,10 @@ k3d image import controller:latest -c cluster
 ```
 make deploy
 ```
+
+Repeat steps 1, 3 and 4 when you've made changes to the controller. You might need to `kubectl rollout restart deploy` to get the controller to roll.
+
+---
 
 ### Generate Helm chart
 
