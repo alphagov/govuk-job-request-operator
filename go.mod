@@ -1,6 +1,6 @@
 module github.com/alphagov/govuk-job-request-operator
 
-go 1.26.4
+go 1.27.0
 
 tool sigs.k8s.io/kubebuilder/v4
 
