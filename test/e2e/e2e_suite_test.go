@@ -28,12 +28,10 @@ package e2e
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"text/template"
 
@@ -44,21 +42,6 @@ import (
 )
 
 var (
-	// JobRequesterUser is the user to use for creating JobRequest resources
-	JobRequesterUser = &utils.ClusterUser{
-		Name: "job-requester",
-		ARN:  "arn:aws:sts::123456789012:assumed-role/job.req-developer/e2e",
-	}
-	// JobReviewerUser is the user to use for creating JobRequestReview resources
-	JobReviewerUser = &utils.ClusterUser{
-		Name: "job-reviewer",
-		ARN:  "arn:aws:sts::123456789012:assumed-role/job.rev-developer/e2e",
-	}
-	// KubernetesUsers will have kubernetes users provisioned into the cluster. Only Name and ARN need to be specified
-	KubernetesUsers = &utils.ClusterUsers{
-		JobRequesterUser,
-		JobReviewerUser,
-	}
 	// shouldCleanupCertManager tracks whether CertManager was installed by this suite.
 	shouldCleanupCertManager = false
 )
@@ -74,9 +57,6 @@ const (
 	appNamespace = "apps"
 	// namespace where the operator is deployed in
 	controllerNamespace = "govuk-job-request-operator-system"
-	// Empty strings are needed to disable impersonation for e2e tests
-	jobRequestImpersonateUser = ""
-	jobReviewImpersonateUser  = ""
 )
 
 // To skip CertManager installation, set: CERT_MANAGER_INSTALL_SKIP=true
@@ -91,8 +71,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	cmd := exec.CommandContext(ctx, "kind", "create", "cluster", "--name", kindCluster)
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to create Kind cluster")
-
-	setupUsers(ctx)
 
 	By("building the manager image")
 	cmd = exec.CommandContext(ctx, "make", "docker-build", fmt.Sprintf("IMG=%s", managerImage))
@@ -154,6 +132,13 @@ var _ = BeforeSuite(func(ctx context.Context) {
 		"pod-security.kubernetes.io/enforce=restricted")
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to label apps namespace with restricted policy")
+
+	users := []string{
+		jobRequestImpersonateUser,
+		jobReviewImpersonateUser,
+	}
+
+	setupUsers(ctx, users)
 })
 
 var _ = AfterSuite(func(ctx context.Context) {
@@ -176,9 +161,6 @@ var _ = AfterSuite(func(ctx context.Context) {
 	By("removing manager namespace")
 	cmd = exec.CommandContext(ctx, "kubectl", "delete", "ns", controllerNamespace)
 	_, _ = utils.Run(cmd)
-
-	By("deleting the kubernetes users from kubeconfig")
-	utils.DeleteKubernetesUsersFromKubeconfig(ctx, KubernetesUsers)
 
 	By("deleting the Kind cluster")
 	cmd = exec.CommandContext(ctx, "kind", "delete", "cluster", "--name", kindCluster)
@@ -217,91 +199,24 @@ func applyKubernetesManifest(ctx context.Context, manifestPath string) error {
 	return nil
 }
 
-func setupUsers(ctx context.Context) {
+func setupUsers(ctx context.Context, users []string) {
+	By("Setup Role to create and retrieve JobRequests and JobRequestReviews")
+	roleFilePath, err := utils.RetrieveFixtureFilePath("user_setup/job_request_create_get_role.yaml")
+	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to retrieve fixture with path %s", roleFilePath))
+	err = applyKubernetesManifest(ctx, roleFilePath)
+
 	By("Setting up users in the cluster")
 	tempDir, err := os.MkdirTemp("", "govuk-job-request-operator-e2e-*")
 	Expect(err).NotTo(HaveOccurred(), "Couldn't create tempdir for setting up users")
 
-	for _, user := range *KubernetesUsers {
-		err = os.Mkdir(filepath.Join(tempDir, user.Name), 0700)
-		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to create tempdir for user %s", user.Name))
-	}
-
-	By("Creating the users in the cluster")
-	for _, user := range *KubernetesUsers {
-		user.KeyFilePath = filepath.Join(tempDir, user.Name, "e2e-cert.key")
-		user.CSRFilePath = filepath.Join(tempDir, user.Name, "e2e-cert.csr")
-		user.CSRManifestPath = filepath.Join(tempDir, user.Name, "e2e-csr-manifest.yaml")
-		user.CertificateFilePath = filepath.Join(tempDir, user.Name, "e2e-signed.crt")
-		user.KubectlUserName = fmt.Sprintf("govuk-job-request-operator-e2e-%s", user.Name)
-
-		By(fmt.Sprintf("Generating the certificate for user %s", user.Name))
-		cmd := exec.CommandContext(ctx, "openssl", "genrsa", "-out", user.KeyFilePath)
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to generate user certificate")
-
-		By(fmt.Sprintf("Generating the certificate signing request for user %s", user.Name))
-		// The /'s in the ARNs must have an escape character in the final arg sent to the openssl command to be a valid CN
-		cmd = exec.CommandContext(
-			ctx, "openssl", "req", "-new",
-			"-key", user.KeyFilePath, "-out", user.CSRFilePath,
-			"-subj", fmt.Sprintf("/CN=%s", strings.ReplaceAll(user.ARN, "/", "\\/")),
-		)
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to generate user certificate signing request")
-
-		By(fmt.Sprintf("Generating the CSR kubernetes manifest for user %s", user.Name))
-		csr, err := os.ReadFile(user.CSRFilePath)
-		Expect(err).NotTo(HaveOccurred(), "Failed reading CSR file")
-		user.Base64EncodedCSR = base64.StdEncoding.EncodeToString(csr)
-
-		By("Applying the CSR request manifest")
-		renderTemplate("user_setup/certificate_signing_request.template.yaml", user.CSRManifestPath, user)
-
-		By("Applying the CSR to the cluster")
-		err = applyKubernetesManifest(ctx, user.CSRManifestPath)
-		Expect(err).NotTo(HaveOccurred(), "Failed applying CSR Manigest")
-
-		By("Approving the CSR request in kubernetes")
-		cmd = exec.CommandContext(ctx, "kubectl", "certificate", "approve", user.Name)
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to approve the CSR")
-
-		By("Waiting for the certificate to be issued")
-		cmd = exec.CommandContext(ctx, "kubectl", "wait", "csr", user.Name, "--for", "jsonpath={.status.certificate}", "--timeout", "1m")
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "CSR failed to issue after being approved")
-
-		By("Saving the signed certificate")
-		cmd = exec.CommandContext(ctx, "kubectl", "get", "csr", user.Name, "-o", "jsonpath={.status.certificate}")
-		base64EncodedSignedCertificate, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred(), "Failed to fetch base64 encoded signed certificate")
-
-		data, err := base64.StdEncoding.DecodeString(base64EncodedSignedCertificate)
-		Expect(err).NotTo(HaveOccurred(), "Failed to base64 decode the signed certificate")
-
-		err = os.WriteFile(user.CertificateFilePath, data, 0600)
-		Expect(err).NotTo(HaveOccurred(), "Failed to write signed certificate to disk")
-
-		cmd = exec.CommandContext(
-			ctx,
-			"kubectl", "config", "set-credentials", user.KubectlUserName,
-			fmt.Sprintf("--client-key=%s", user.KeyFilePath),
-			fmt.Sprintf("--client-certificate=%s", user.CertificateFilePath),
-			"--embed-certs=true",
-		)
-		_, err = utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-	}
-
-	By("Applying the cluster role bindings")
+	By("Applying the role bindings")
 	roleBindingManifestFilePath := filepath.Join(tempDir, "role_bindings.yaml")
-	renderTemplate("user_setup/role_binding.template.yaml", roleBindingManifestFilePath, *KubernetesUsers)
+	renderTemplate("user_setup/role_binding.template.yaml", roleBindingManifestFilePath, users)
 	err = applyKubernetesManifest(ctx, roleBindingManifestFilePath)
 	Expect(err).NotTo(HaveOccurred(), "Failed to apply role binding manifest")
 }
 
-func renderTemplate(templatePath, outputPath string, templateData any) {
+func renderTemplate(templatePath, outputPath string, templateData []string) {
 	templatePath, err := utils.RetrieveFixtureFilePath(templatePath)
 	Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("Failed to retrieve fixture with path %s", templatePath))
 

@@ -29,7 +29,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"time"
 
@@ -47,8 +46,11 @@ const serviceAccountName = "govuk-job-request-operator-controller-manager"
 // metricsServiceName is the name of the metrics service of the project
 const metricsServiceName = "govuk-job-request-operator-controller-manager-metrics-service"
 
-// metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
-const metricsRoleBindingName = "govuk-job-request-operator-metrics-binding"
+// users
+const (
+	jobRequestImpersonateUser = "arn:aws:sts::123456789012:assumed-role/job.req-developer/e2e"
+	jobReviewImpersonateUser  = "arn:aws:sts::123456789012:assumed-role/job.rev-developer/e2e"
+)
 
 // fixtures
 const (
@@ -71,8 +73,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	)
 
 	BeforeEach(func(ctx context.Context) {
-		SwitchToKubernetesAdminUser(ctx)
-
 		By("clean up JobReviews")
 		cmd := exec.CommandContext(ctx, "kubectl", "delete", "jrr", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
@@ -91,8 +91,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	})
 
 	AfterEach(func(ctx context.Context) {
-		SwitchToKubernetesAdminUser(ctx)
-
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
 			By("Fetching controller manager pod logs")
@@ -278,8 +276,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("Should add requested-by annotation to JobRequests", func(ctx context.Context) {
-			SwitchToKubernetesUser(ctx, JobRequesterUser)
-
 			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithoutAnnotation)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
@@ -294,13 +290,11 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(JobRequesterUser.ARN))
+				g.Expect(output).To(Equal(jobRequestImpersonateUser))
 			}).Should(Succeed())
 		})
 
 		It("Should override a user-specified requested-by annotation on JobRequests", func(ctx context.Context) {
-			SwitchToKubernetesUser(ctx, JobRequesterUser)
-
 			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
@@ -315,13 +309,11 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(JobRequesterUser.ARN))
+				g.Expect(output).To(Equal(jobRequestImpersonateUser))
 			}).Should(Succeed())
 		})
 
 		It("Should add reviewed-by annotation to JobRequestReviews", func(ctx context.Context) {
-			SwitchToKubernetesUser(ctx, JobReviewerUser)
-
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithoutAnnotation)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
@@ -339,13 +331,11 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(JobReviewerUser.ARN))
+				g.Expect(output).To(Equal(jobReviewImpersonateUser))
 			}).Should(Succeed())
 		})
 
 		It("Should override a user set reviewed-by annotation on JobRequestReviews", func(ctx context.Context) {
-			SwitchToKubernetesUser(ctx, JobReviewerUser)
-
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithAnnotation)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
@@ -363,7 +353,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(JobReviewerUser.ARN))
+				g.Expect(output).To(Equal(jobReviewImpersonateUser))
 			}).Should(Succeed())
 		})
 	})
@@ -392,8 +382,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			})
 
 			It("should set the correct JobRequest to Rejected if a JobRequestReview is created to reject it", func(ctx context.Context) {
-				SwitchToKubernetesUser(ctx, JobRequesterUser)
-
 				By("creating a JobRequest")
 				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
 				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
@@ -431,8 +419,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
 				}
 				Eventually(ctx, verifySecondJobRequestInPendingState, 20*time.Second, time.Second).Should(Succeed())
-
-				SwitchToKubernetesUser(ctx, JobReviewerUser)
 
 				By("creating a JobRequestReview to reject the second JobRequest")
 				jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejectedForSecondJob)
@@ -502,8 +488,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				}
 				Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
 
-				SwitchToKubernetesUser(ctx, JobRequesterUser)
-
 				By("creating a JobRequest")
 				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
 				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
@@ -522,8 +506,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
 				}
 				Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
-
-				SwitchToKubernetesUser(ctx, JobReviewerUser)
 
 				By("creating a JobRequestReview to approve the JobRequest")
 				jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
@@ -550,8 +532,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			})
 
 			It("should set the JobRequest to pending", func(ctx context.Context) {
-				SwitchToKubernetesUser(ctx, JobReviewerUser)
-
 				By("creating a JobRequest")
 				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSecondJob)
 				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
@@ -594,8 +574,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			}
 			Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
 
-			SwitchToKubernetesUser(ctx, JobRequesterUser)
-
 			By("creating a JobRequest")
 			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
@@ -633,8 +611,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
 			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
-
-			SwitchToKubernetesUser(ctx, JobReviewerUser)
 
 			By("creating a JobRequestReview to approve the JobRequest")
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
@@ -786,8 +762,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			}
 			Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
 
-			SwitchToKubernetesUser(ctx, JobRequesterUser)
-
 			By("creating a JobRequest")
 			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForFailedJob)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
@@ -824,8 +798,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
 			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
-
-			SwitchToKubernetesUser(ctx, JobReviewerUser)
 
 			By("creating a JobRequestReview to approve the JobRequest")
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
@@ -964,8 +936,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			}
 			Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
 
-			SwitchToKubernetesUser(ctx, JobRequesterUser)
-
 			By("creating a JobRequest")
 			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
@@ -1002,8 +972,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			}
 			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
 			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
-
-			SwitchToKubernetesUser(ctx, JobReviewerUser)
 
 			By("creating a JobRequestReview to reject the JobRequest")
 			jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejected)
@@ -1093,23 +1061,4 @@ func getMetricsOutput(ctx context.Context, controllerNamespace string) (string, 
 	By("getting the curl-metrics logs")
 	cmd := exec.CommandContext(ctx, "kubectl", "logs", "curl-metrics", "-n", controllerNamespace)
 	return utils.Run(cmd)
-}
-
-func SwitchToKubernetesAdminUser(ctx context.Context) {
-	By("switching to the kubernetes-admin user")
-	switchToUser(ctx, "kind-govuk-job-request-operator-test-e2e")
-}
-
-func SwitchToKubernetesUser(ctx context.Context, clusterUser *utils.ClusterUser) {
-	By(fmt.Sprintf("switching to the %s user", clusterUser.Name))
-	switchToUser(ctx, clusterUser.KubectlUserName)
-}
-
-// E2E tests don't impersonate the user so we have to switch users for them
-func switchToUser(ctx context.Context, kubectlUserName string) {
-	if os.Getenv("SMOKE_TEST_ENABLED") != "true" {
-		cmd := exec.CommandContext(ctx, "kubectl", "config", "set-context", "--current", "--user", kubectlUserName)
-		_, err := utils.Run(cmd)
-		Expect(err).NotTo(HaveOccurred())
-	}
 }
