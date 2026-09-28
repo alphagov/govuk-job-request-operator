@@ -578,8 +578,8 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 
 			targetResource := deploymentBuilder(jobRequestName, appNamespaceName)
 
-			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
-			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed(), "Failed to create deployment")
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed(), "Failed to create job")
 
 			eventList := &eventsv1.EventList{}
 
@@ -596,6 +596,54 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 
 			Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 			Expect(jobList.Items).To(BeEmpty())
+		})
+
+		It("a Pending job request should go to Conflicted state when a Job already exists with a name matching that which the JobRequest would generate", func(ctx context.Context) {
+			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, appNamespaceName, containerName)
+			targetResource := deploymentBuilder(deploymentName, appNamespaceName)
+			existingJob := jobBuilder(jobRequest)
+			jobRequestReview := jobRequestReviewBuilder(jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
+
+			jobRequestStatus := platformv1.JobRequestStatus{
+				State:      platformv1.JobRequestApproved,
+				ReviewName: jobRequestReviewName,
+			}
+
+			Expect(k8sClient.Create(ctx, targetResource)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+			eventList := &eventsv1.EventList{}
+
+			Eventually(ctx, func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestPending))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestPending)))
+			}).Should(Succeed())
+
+			Expect(k8sClient.Create(ctx, existingJob)).To(Succeed())
+			jobList := &batch.JobList{}
+			Eventually(ctx, func(g Gomega) {
+				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
+				g.Expect(jobList.Items).To(HaveLen(1))
+				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
+				g.Expect(jobList.Items[0].GetNamespace()).To(Equal(appNamespaceName))
+			}).Should(Succeed())
+
+			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+			jobRequest.Status = jobRequestStatus
+			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+
+			Eventually(ctx, func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed(), "Failed to get job request")
+				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestConflicted), "State was not Conflicted")
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed(), "Failed to list events")
+				g.Expect(eventList.Items).To(HaveLen(2), "List was expected to have two elements")
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestPending)))
+				g.Expect(eventList.Items[1].Reason).To(Equal(string(platformv1.JobRequestConflicted)))
+				g.Expect(eventList.Items[1].Note).To(ContainSubstring(fmt.Sprintf("Job %s already exists", jobRequestNamespaceName)))
+			}).Should(Succeed())
 		})
 
 		DescribeTable("when the JobRequest requested-by annotation is parsed",

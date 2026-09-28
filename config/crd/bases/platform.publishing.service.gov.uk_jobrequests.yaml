@@ -120,6 +120,7 @@ spec:
                 - Complete
                 - Failed
                 - Malformed
+                - Conflicted
                 type: string
             type: object
         required:

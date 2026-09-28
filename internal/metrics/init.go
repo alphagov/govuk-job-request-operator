@@ -20,6 +20,7 @@ func InitRequestCustomMetrics() platformv1.RequestCustomMetrics {
 		RejectedStateTotal:           JobRequestRejectedStateTotal,
 		StartedStateTotal:            JobRequestStartedStateTotal,
 		MalformedStateTotal:          JobRequestMalformedStateTotal,
+		ConflictedStateTotal:         JobRequestConflictedStateTotal,
 		JobCompleteStateTotal:        JobRequestJobCompleteStateTotal,
 		JobFailedStateTotal:          JobRequestJobFailedStateTotal,
 		TimeTilReview:                JobRequestTimeTilReview,

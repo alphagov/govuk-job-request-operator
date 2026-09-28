@@ -20,6 +20,7 @@ type RequestCustomMetrics struct {
 	RejectedStateTotal           *prometheus.CounterVec
 	StartedStateTotal            *prometheus.CounterVec
 	MalformedStateTotal          *prometheus.CounterVec
+	ConflictedStateTotal         *prometheus.CounterVec
 	JobCompleteStateTotal        *prometheus.CounterVec
 	JobFailedStateTotal          *prometheus.CounterVec
 	TimeTilReview                *prometheus.HistogramVec

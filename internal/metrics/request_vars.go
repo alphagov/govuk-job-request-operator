@@ -116,6 +116,13 @@ var (
 		},
 		vectorLabels,
 	)
+	JobRequestConflictedStateTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "job_request_conflicted_state_total",
+			Help: "Total number of job requests in conflicted state",
+		},
+		vectorLabels,
+	)
 	JobRequestJobCompleteStateTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "job_request_job_complete_state_total",

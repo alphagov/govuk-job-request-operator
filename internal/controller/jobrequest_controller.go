@@ -251,6 +251,7 @@ func endReconcileIfInTerminalState(jobRequestState platformv1.JobRequestState) b
 		platformv1.JobRequestComplete,
 		platformv1.JobRequestFailed,
 		platformv1.JobRequestMalformed,
+		platformv1.JobRequestConflicted,
 	}, jobRequestState)
 }
 
@@ -374,7 +375,9 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 		return ctrl.Result{}, nil
 	case platformv1.JobRequestApproved:
 		err := r.ApiServerClient.Get(ctx, jobNamespaceName, job)
-		if err != nil && apierrors.IsNotFound(err) {
+
+		switch {
+		case err != nil && apierrors.IsNotFound(err): // Job not found; happy path
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Approved", "None", "JobRequest is Approved")
 			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestApproved)
 			r.CustomMetrics.ApprovedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
@@ -396,9 +399,21 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 			r.CustomMetrics.StartedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 			return ctrl.Result{}, nil
-		}
+		case err != nil: // Unexpected error
+			r.Log.Error(err, "Failed to check if Job exists when creating JobRequest")
+			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "JobLookupFailed", "None", "Failed to perform a search for existing jobs")
+			return ctrl.Result{}, err
 
-		return ctrl.Result{}, nil
+		default: // Job is found, but it shouldn't have been present when entering the approved state
+			r.Log.Error(nil, "Job already exists", "JobRequest", jobRequest.GetName(), "Job", jobNamespaceName)
+			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestConflicted), "None", "Job %s already exists. JobRequest is Conflicted", jobNamespaceName)
+
+			r.setState(ctx, jobRequest, platformv1.JobRequestConflicted)
+
+			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestConflicted)
+			r.CustomMetrics.ConflictedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
+			return ctrl.Result{}, nil
+		}
 	case platformv1.JobRequestRejected:
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, string(platformv1.JobRequestRejected), "None", "JobRequest is Rejected")
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestRejected)
