@@ -297,7 +297,7 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestMalformed))
 				g.Expect(eventList.Items).To(HaveLen(2))
 				g.Expect(eventList.Items[1].Reason).To(Equal(string(platformv1.JobRequestMalformed)))
-				g.Expect(eventList.Items[1].Note).To(Equal("Job could not be found"))
+				g.Expect(eventList.Items[1].Note).To(Equal("Job not found."))
 			}).Should(Succeed())
 		})
 
