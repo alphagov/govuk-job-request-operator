@@ -60,7 +60,8 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	jobRequestReview := &platformv1.JobRequestReview{}
 	r.CustomMetrics.MetricLabels = prometheus.Labels{
 		"namespaced_name": req.Namespace + "/" + req.Name,
-		"state":           "",
+		// nolint:goconst
+		"state": "",
 	}
 
 	r.Log.Info("[JobRequestReviewReconciler] Received job", "jobRequestReviewName", req.NamespacedName)

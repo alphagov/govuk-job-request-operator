@@ -68,7 +68,8 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	jobRequest := &platformv1.JobRequest{}
 	r.CustomMetrics.MetricLabels = prometheus.Labels{
 		"namespaced_name": req.Namespace + "/" + req.Name,
-		"state":           "",
+		// nolint:goconst
+		"state": "",
 	}
 
 	r.Log.Info("[JobRequestReconciler] Received JobRequest", "jobRequestName", req.Name, "namespace", req.Namespace)
@@ -354,7 +355,11 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 		return platformv1.JobRequestPending
 	}
 
-	r.CustomMetrics.TimeTilReview.With(r.CustomMetrics.MetricLabels).Observe(float64(jobRequestReviewList.Items[0].CreationTimestamp.Unix() - jobRequest.CreationTimestamp.Unix()))
+	r.CustomMetrics.TimeTilReview.With(
+		prometheus.Labels{
+			"state": string(jobRequest.Status.State),
+		},
+	).Observe(float64(jobRequestReviewList.Items[0].CreationTimestamp.Unix() - jobRequest.CreationTimestamp.Unix()))
 
 	return jobRequest.Status.State
 }

@@ -135,6 +135,6 @@ var (
 			Name: "job_request_time_til_review_seconds",
 			Help: "Time until job request review",
 		},
-		vectorLabels,
+		[]string{"state"},
 	)
 )
