@@ -72,7 +72,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		controllerPodName string
 	)
 
-	BeforeEach(func(ctx context.Context) {
+	AfterEach(func(ctx context.Context) {
 		By("clean up JobReviews")
 		cmd := exec.CommandContext(ctx, "kubectl", "delete", "jrr", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
@@ -88,9 +88,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		By("clean up Events")
 		cmd = exec.CommandContext(ctx, "kubectl", "delete", "events", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
-	})
 
-	AfterEach(func(ctx context.Context) {
 		specReport := CurrentSpecReport()
 		if specReport.Failed() {
 			By("Fetching controller manager pod logs")
