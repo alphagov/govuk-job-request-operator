@@ -41,11 +41,6 @@ import (
 	"github.com/alphagov/govuk-job-request-operator/test/utils"
 )
 
-var (
-	// shouldCleanupCertManager tracks whether CertManager was installed by this suite.
-	shouldCleanupCertManager = false
-)
-
 const (
 	// managerImage is the manager image to be built and loaded for testing.
 	managerImage = "ghcr.io/alphagov/govuk/govuk-job-request-operator:v0.0.1"
@@ -59,7 +54,6 @@ const (
 	controllerNamespace = "govuk-job-request-operator-system"
 )
 
-// To skip CertManager installation, set: CERT_MANAGER_INSTALL_SKIP=true
 func TestE2E(t *testing.T) {
 	RegisterFailHandler(Fail)
 	_, _ = fmt.Fprintf(GinkgoWriter, "Starting govuk-job-request-operator e2e test suite\n")
@@ -91,8 +85,6 @@ var _ = BeforeSuite(func(ctx context.Context) {
 	)
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred(), "Failed to load the govuk-replatform-test-app image into Kind")
-
-	setupCertManager(ctx)
 
 	By("creating manager namespace")
 	cmd = exec.CommandContext(ctx, "kubectl", "create", "ns", controllerNamespace)
@@ -167,27 +159,6 @@ var _ = AfterSuite(func(ctx context.Context) {
 	_, err := utils.Run(cmd)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to delete Kind cluster")
 })
-
-// setupCertManager installs CertManager if needed for webhook tests.
-// Skips installation if CERT_MANAGER_INSTALL_SKIP=true or if already present.
-func setupCertManager(ctx context.Context) {
-	if os.Getenv("CERT_MANAGER_INSTALL_SKIP") == "true" {
-		_, _ = fmt.Fprintf(GinkgoWriter, "Skipping CertManager installation (CERT_MANAGER_INSTALL_SKIP=true)\n")
-		return
-	}
-
-	By("checking if CertManager is already installed")
-	if utils.IsCertManagerCRDsInstalled(ctx) {
-		_, _ = fmt.Fprintf(GinkgoWriter, "CertManager is already installed. Skipping installation.\n")
-		return
-	}
-
-	// Mark for cleanup before installation to handle interruptions and partial installs.
-	shouldCleanupCertManager = true
-
-	By("installing CertManager")
-	Expect(utils.InstallCertManager(ctx)).To(Succeed(), "Failed to install CertManager")
-}
 
 func applyKubernetesManifest(ctx context.Context, manifestPath string) error {
 	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", manifestPath)

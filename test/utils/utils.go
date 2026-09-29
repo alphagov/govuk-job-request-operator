@@ -37,16 +37,9 @@ import (
 )
 
 const (
-	certmanagerVersion = "v1.21.1"
-	certmanagerURLTmpl = "https://github.com/cert-manager/cert-manager/releases/download/%s/cert-manager.yaml"
-
 	defaultKindBinary  = "kind"
 	DefaultKindCluster = "govuk-job-request-operator-test-e2e"
 )
-
-func warnError(err error) {
-	_, _ = fmt.Fprintf(GinkgoWriter, "warning: %v\n", err)
-}
 
 // Run executes the provided command within this context
 func Run(cmd *exec.Cmd) (string, error) {
@@ -79,80 +72,6 @@ func RetrieveFixtureFilePath(fixture string) (string, error) {
 	const fixturesBasePath = "test/fixtures/"
 
 	return filepath.Join(dir, fixturesBasePath, fixture), nil
-}
-
-// UninstallCertManager uninstalls the cert manager
-func UninstallCertManager(ctx context.Context) {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.CommandContext(ctx, "kubectl", "delete", "-f", url) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
-	if _, err := Run(cmd); err != nil {
-		warnError(err)
-	}
-
-	// Delete leftover leases in kube-system (not cleaned by default)
-	kubeSystemLeases := []string{
-		"cert-manager-cainjector-leader-election",
-		"cert-manager-controller",
-	}
-	for _, lease := range kubeSystemLeases {
-		cmd := exec.CommandContext(ctx, "kubectl", "delete", "lease", lease,
-			"-n", "kube-system", "--ignore-not-found", "--force", "--grace-period=0") //gosec:disable G204 -- We intentionally want to exec a sub process with a var
-		if _, err := Run(cmd); err != nil {
-			warnError(err)
-		}
-	}
-}
-
-// InstallCertManager installs the cert manager bundle.
-func InstallCertManager(ctx context.Context) error {
-	url := fmt.Sprintf(certmanagerURLTmpl, certmanagerVersion)
-	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", url) //gosec:disable G204 -- We intentionally want to exec a sub process with a var
-	if _, err := Run(cmd); err != nil {
-		return err
-	}
-	// Wait for cert-manager-webhook to be ready, which can take time if cert-manager
-	// was re-installed after uninstalling on a cluster.
-	cmd = exec.CommandContext(ctx, "kubectl", "wait", "deployment.apps/cert-manager-webhook",
-		"--for", "condition=Available",
-		"--namespace", "cert-manager",
-		"--timeout", "5m",
-	) //gosec:disable G204 -- We intentionally want to exec a sub process
-
-	_, err := Run(cmd)
-	return err
-}
-
-// IsCertManagerCRDsInstalled checks if any Cert Manager CRDs are installed
-// by verifying the existence of key CRDs related to Cert Manager.
-func IsCertManagerCRDsInstalled(ctx context.Context) bool {
-	// List of common Cert Manager CRDs
-	certManagerCRDs := []string{
-		"certificates.cert-manager.io",
-		"issuers.cert-manager.io",
-		"clusterissuers.cert-manager.io",
-		"certificaterequests.cert-manager.io",
-		"orders.acme.cert-manager.io",
-		"challenges.acme.cert-manager.io",
-	}
-
-	// Execute the kubectl command to get all CRDs
-	cmd := exec.CommandContext(ctx, "kubectl", "get", "crds") //gosec:disable G204 -- We intentionally want to exec a sub process
-	output, err := Run(cmd)
-	if err != nil {
-		return false
-	}
-
-	// Check if any of the Cert Manager CRDs are present
-	crdList := GetNonEmptyLines(output)
-	for _, crd := range certManagerCRDs {
-		for _, line := range crdList {
-			if strings.Contains(line, crd) {
-				return true
-			}
-		}
-	}
-
-	return false
 }
 
 // LoadImageToKindClusterWithName loads a local docker image to the kind cluster
