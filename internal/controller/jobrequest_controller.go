@@ -228,7 +228,7 @@ func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context
 }
 
 func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName client.ObjectKey, jobRequest *platformv1.JobRequest) bool {
-	err := r.CacheClient.Get(ctx, namespaceName, jobRequest)
+	err := r.ApiServerClient.Get(ctx, namespaceName, jobRequest)
 	if err != nil {
 		var errorLogMessage string
 		if apierrors.IsNotFound(err) {
