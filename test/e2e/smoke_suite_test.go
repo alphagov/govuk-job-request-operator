@@ -16,26 +16,11 @@ import (
 	"github.com/alphagov/govuk-job-request-operator/test/utils"
 )
 
-var (
-	// JobRequesterUser is the user to use for creating JobRequest resources
-	JobRequesterUser = &utils.ClusterUser{
-		Name: "job-requester",
-		ARN:  "arn:aws:sts::123456789012:assumed-role/job.req-developer/e2e",
-	}
-	// JobReviewerUser is the user to use for creating JobRequestReview resources
-	JobReviewerUser = &utils.ClusterUser{
-		Name: "job-reviewer",
-		ARN:  "arn:aws:sts::123456789012:assumed-role/job.rev-developer/e2e",
-	}
-	jobRequestImpersonateUser = JobRequesterUser.ARN
-	jobReviewImpersonateUser  = JobReviewerUser.ARN
-)
-
 const (
 	smokeTestServiceAccountName = "smoke-test-runner-sa"
 	clusterName                 = "cluster"
 	// appNamespace is the namespace used by the smoke tests to create JobRequest and JobRequestReview resources
-	appNamespace = "smoke-test"
+	appNamespace = "job-request-operator-smoke-test"
 	// controllerNamespace matches the default cluster deployment namespace.
 	controllerNamespace = "job-request-operator"
 )

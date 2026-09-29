@@ -108,8 +108,10 @@ make manifests
 2. Start a k3d cluster
 
 ```
-k3d cluster create cluster --api-port 6550
+k3d cluster create cluster --api-port 6550 --image rancher/k3s:v1.37.0-k3s1
 ```
+
+`k3d` by default doesn't run a version of Kubernetes that supports `MutatingAdmissionPolicy` so explicitly start one with `v1.37`
 
 3. Install the CRDs into the cluster
 

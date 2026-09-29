@@ -1,15 +1,16 @@
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
-  name: e2e-admin-permissions
+  name: job-request-create-get
+  namespace: apps
 subjects:
 {{ range . }}
   - kind: User
-    name: {{ .ARN }}
+    name: {{ . }}
     apiGroup: rbac.authorization.k8s.io
 {{ end }}
 roleRef:
-  kind: ClusterRole
-  name: cluster-admin
+  kind: Role
+  name: job-request-create-get
   apiGroup: rbac.authorization.k8s.io

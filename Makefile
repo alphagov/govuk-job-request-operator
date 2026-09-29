@@ -102,7 +102,7 @@ test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated 
 
 .PHONY: smoke
 smoke: manifests generate fmt vet ## Run the smoke tests.
-	SMOKE_TEST_ENABLED=true go test -tags=smoke ./test/e2e/ -run TestSmokeE2E -v -race -ginkgo.v -ginkgo.skip="when checking manager health" $(GO_TEST_ARGS)
+	go test -tags=smoke ./test/e2e/ -run TestSmokeE2E -v -race -ginkgo.v -ginkgo.skip="when checking manager health" $(GO_TEST_ARGS)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -124,7 +124,7 @@ build: manifests generate fmt vet ## Build manager binary.
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run ./cmd/
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
