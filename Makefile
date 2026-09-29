@@ -21,6 +21,9 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+# GO_TEST_ARGS can be set to pass additional arguments when invoking Go for test suites
+GO_TEST_ARGS ?=
+
 .PHONY: all
 all: build
 
@@ -68,7 +71,8 @@ test: manifests generate fmt vet setup-envtest ## Run tests.
 		-covermode atomic \
 		-race \
 		-args \
-		-test.gocoverdir="${PWD}/coverage/unit"
+		-test.gocoverdir="${PWD}/coverage/unit" \
+		$(GO_TEST_ARGS)
 
 .PHONY: unit_tests
 unit_tests: test # unit_tests is invoked by the re-usable go-test workflow in .github/workflows/ci.yml
@@ -94,11 +98,11 @@ coverage_report: # coverage_report is invoked by the re-usable go-test workflow 
 
 .PHONY: test-e2e
 test-e2e: manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	go test -tags=e2e ./test/e2e/ -run TestE2E -v -race -ginkgo.v
+	go test -tags=e2e ./test/e2e/ -run TestE2E -v -race -ginkgo.v $(GO_TEST_ARGS)
 
 .PHONY: smoke
 smoke: manifests generate fmt vet ## Run the smoke tests.
-	SMOKE_TEST_ENABLED=true go test -tags=smoke ./test/e2e/ -run TestSmokeE2E -v -race -ginkgo.v -ginkgo.skip="when checking manager health"
+	SMOKE_TEST_ENABLED=true go test -tags=smoke ./test/e2e/ -run TestSmokeE2E -v -race -ginkgo.v -ginkgo.skip="when checking manager health" $(GO_TEST_ARGS)
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter

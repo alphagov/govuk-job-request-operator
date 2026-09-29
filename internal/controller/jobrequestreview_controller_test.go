@@ -196,7 +196,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			}, 20*time.Second).Should(Succeed())
 		})
 
-		It("should successfully reconcile with JobRequestReview state as JobRequestMalformed if the corresponding JobRequest is Malformed", func(ctx context.Context) {
+		It("should successfully reconcile with JobRequestReview state as JobRequestReviewMalformed if the corresponding JobRequest is Malformed", func(ctx context.Context) {
 			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
 
@@ -219,6 +219,32 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewMalformed))
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewMalformed)))
+			}).Should(Succeed())
+		})
+
+		It("should successfully reconcile with JobRequestReview state as JobRequestReviewConflict if the corresponding JobRequest is Conflicted", func(ctx context.Context) {
+			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
+			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+
+			jobRequestStatus := platformv1.JobRequestStatus{
+				JobName:    deploymentName,
+				State:      platformv1.JobRequestConflicted,
+				ReviewName: jobRequestReviewName,
+			}
+
+			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+			jobRequest.Status = jobRequestStatus
+			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+
+			eventList := &eventsv1.EventList{}
+
+			Eventually(ctx, func(g Gomega) {
+				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
+				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewConflict))
+				g.Expect(eventList.Items).To(HaveLen(1))
+				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewConflict)))
 			}).Should(Succeed())
 		})
 

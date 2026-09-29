@@ -60,7 +60,7 @@ type JobRequestSpec struct {
 type JobRequestStatus struct {
 	// Name of the Kubernetes Job created for this job request.
 	JobName string `json:"jobName,omitempty"`
-	// +kubebuilder:validation:Enum=Pending;Approved;Rejected;Started;Complete;Failed;Malformed
+	// +kubebuilder:validation:Enum=Pending;Approved;Rejected;Started;Complete;Failed;Malformed;Conflicted
 	State JobRequestState `json:"state,omitempty"`
 	// Name of the JobRequestReview resource that reviewed this job request.
 	ReviewName string `json:"reviewName,omitempty"`
@@ -141,5 +141,6 @@ const (
 	JobRequestComplete              JobRequestState = "Complete"
 	JobRequestFailed                JobRequestState = "Failed"
 	JobRequestMalformed             JobRequestState = "Malformed"
+	JobRequestConflicted            JobRequestState = "Conflicted"
 	JobRequestRequestedByAnnotation string          = "platform.publishing.service.gov.uk/requested-by"
 )

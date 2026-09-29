@@ -3,6 +3,7 @@ package controller
 import (
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -110,4 +111,25 @@ func deploymentBuilder(resourceName, resourceNamespace string) *appsv1.Deploymen
 			},
 		},
 	}
+}
+
+func jobBuilder(jobRequest *platformv1.JobRequest) *batchv1.Job {
+	job := &batchv1.Job{}
+
+	job.Namespace = jobRequest.Namespace
+	job.Name = jobRequest.Name
+
+	job.Spec = batchv1.JobSpec{
+		Template: v1.PodTemplateSpec{
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{Name: "container", Image: "busybox:1"},
+				},
+				RestartPolicy: "Never",
+			},
+		},
+		Suspend: new(true),
+	}
+
+	return job
 }

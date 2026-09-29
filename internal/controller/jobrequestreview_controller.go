@@ -339,6 +339,17 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 
 		return ctrl.Result{}, nil
 
+	case platformv1.JobRequestConflicted:
+		err := errors.New("JobRequest is Conflicted")
+		r.Log.Error(err, "JobRequest is in a Conflicted state and cannot be reviewed.")
+
+		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeWarning, string(platformv1.JobRequestReviewConflict), "None", "JobRequest is in a Conflicted state")
+		r.setState(ctx, jobRequestReview, platformv1.JobRequestReviewConflict)
+		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestReviewConflict)
+		r.CustomMetrics.ConflictStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
+
+		return ctrl.Result{}, nil
+
 	case platformv1.JobRequestPending:
 		return r.handleReviewDecision(ctx, jobRequest, jobRequestReview)
 
