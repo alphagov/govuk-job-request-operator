@@ -1,0 +1,12 @@
+{{- if eq .Values.govukEnvironment "production" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "govuk-job-request-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "govuk-job-request-operator.resourceName" (dict "suffix" "smoke-test-runner" "context" $) }}
+  namespace: job-request-operator-smoke-test
+{{- end }}

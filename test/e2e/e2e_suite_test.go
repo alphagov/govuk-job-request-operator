@@ -50,8 +50,6 @@ const (
 	govukReplatformTestAppImage = "ghcr.io/alphagov/govuk/govuk-replatform-test-app:v48"
 	// namespace where resources are deployed in
 	appNamespace = "apps"
-	// namespace where the operator is deployed in
-	controllerNamespace = "govuk-job-request-operator-system"
 )
 
 func TestE2E(t *testing.T) {

@@ -1,0 +1,15 @@
+{{- if eq .Values.govukEnvironment "production" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "govuk-job-request-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: {{ include "govuk-job-request-operator.resourceName" (dict "suffix" "smoke-job-role" "context" $) }}
+  namespace: job-request-operator-smoke-test
+rules:
+  - apiGroups: ["platform.publishing.service.gov.uk"]
+    resources: ["jobrequests", "jobrequestreviews"]
+    verbs: ["get", "create"]
+{{- end }}
