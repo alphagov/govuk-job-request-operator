@@ -35,29 +35,16 @@ import (
 	batch "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	"k8s.io/client-go/tools/events"
-
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/go-logr/logr"
 )
 
-const ReconcilliationFinished bool = true
-const ReconcilliationIncomplete bool = false
-
 type JobRequestReconciler struct {
-	CacheClient     client.Client
-	ApiServerClient client.Reader
-	Scheme          *runtime.Scheme
-	Recorder        events.EventRecorder
-	Log             logr.Logger
-	ResourceTtl     time.Duration
-	CustomMetrics   platformv1.RequestCustomMetrics
+	CustomMetrics platformv1.RequestCustomMetrics
+	Reconciler[*platformv1.JobRequest]
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
@@ -485,36 +472,4 @@ func (r *JobRequestReconciler) SetupControllerWithManager(mgr ctrl.Manager) erro
 		Named("jobrequest").
 		Owns(&batch.Job{}).
 		Complete(r)
-}
-
-func (r *JobRequestReconciler) LogReconcillationExit(complete bool, message string, jobRequest *platformv1.JobRequest, err error, kvArgs ...any) {
-	var exitMessage = message
-	if complete {
-		exitMessage += " Ending reconciliation."
-	} else {
-		exitMessage += " Reconcile will try again."
-	}
-
-	if err != nil {
-		r.LogError(err, exitMessage, jobRequest, kvArgs...)
-	} else {
-		r.LogInfo(exitMessage, jobRequest, kvArgs...)
-	}
-}
-
-func (r *JobRequestReconciler) LogError(err error, message string, jobRequest *platformv1.JobRequest, kvArgs ...any) {
-	r.Log.Error(err, "[JobRequestReconciler] "+message, r.logMessageArgs(jobRequest, kvArgs)...)
-}
-
-func (r *JobRequestReconciler) LogInfo(message string, jobRequest *platformv1.JobRequest, kvArgs ...any) {
-	r.Log.Info("[JobRequestReconciler] "+message, r.logMessageArgs(jobRequest, kvArgs)...)
-}
-
-func (r *JobRequestReconciler) logMessageArgs(jobRequest *platformv1.JobRequest, kvArgs []any) []any {
-	defaultArgs := []any{
-		"jobRequestName", jobRequest.Name,
-		"namespace", jobRequest.Namespace,
-	}
-
-	return append(defaultArgs, kvArgs...)
 }

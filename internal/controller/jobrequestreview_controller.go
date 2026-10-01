@@ -31,25 +31,17 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
-	"github.com/go-logr/logr"
 )
 
 type JobRequestReviewReconciler struct {
-	CacheClient     client.Client
-	ApiServerClient client.Reader
-	Scheme          *runtime.Scheme
-	Recorder        events.EventRecorder
-	Log             logr.Logger
-	ResourceTtl     time.Duration
-	CustomMetrics   platformv1.ReviewCustomMetrics
+	CustomMetrics platformv1.ReviewCustomMetrics
+	Reconciler[*platformv1.JobRequestReview]
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequestreviews,verbs=get;list;watch;create;update;patch;delete
@@ -467,36 +459,4 @@ func (r *JobRequestReviewReconciler) SetupControllerWithManager(mgr ctrl.Manager
 		For(&platformv1.JobRequestReview{}).
 		Named("jobrequestreview").
 		Complete(r)
-}
-
-func (r *JobRequestReviewReconciler) LogReconcillationExit(complete bool, message string, jobRequestReview *platformv1.JobRequestReview, err error, kvArgs ...any) {
-	var exitMessage = message
-	if complete {
-		exitMessage += " Ending reconciliation."
-	} else {
-		exitMessage += " Reconcile will try again."
-	}
-
-	if err != nil {
-		r.LogError(err, exitMessage, jobRequestReview, kvArgs...)
-	} else {
-		r.LogInfo(exitMessage, jobRequestReview, kvArgs...)
-	}
-}
-
-func (r *JobRequestReviewReconciler) LogError(err error, message string, jobRequestReview *platformv1.JobRequestReview, kvArgs ...any) {
-	r.Log.Error(err, "[JobRequestReviewReconciler] "+message, r.logMessageArgs(jobRequestReview, kvArgs)...)
-}
-
-func (r *JobRequestReviewReconciler) LogInfo(message string, jobRequestReview *platformv1.JobRequestReview, kvArgs ...any) {
-	r.Log.Info("[JobRequestReviewReconciler] "+message, r.logMessageArgs(jobRequestReview, kvArgs)...)
-}
-
-func (r *JobRequestReviewReconciler) logMessageArgs(jobRequestReview *platformv1.JobRequestReview, kvArgs []any) []any {
-	defaultArgs := []any{
-		"jobRequestReviewName", jobRequestReview.Name,
-		"namespace", jobRequestReview.Namespace,
-	}
-
-	return append(defaultArgs, kvArgs...)
 }
