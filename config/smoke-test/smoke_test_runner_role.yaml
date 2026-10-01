@@ -1,0 +1,43 @@
+{{- if eq .Values.govukEnvironment "production" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "govuk-job-request-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "govuk-job-request-operator.resourceName" (dict "suffix" "smoke-test-role" "context" $) }}
+  namespace: job-request-operator-smoke-test
+rules:
+- apiGroups:
+  - platform.publishing.service.gov.uk
+  resources:
+  - jobrequestreviews
+  - jobrequests
+  verbs: ["create", "delete", "get", "list", "update", "watch"]
+- apiGroups:
+  - platform.publishing.service.gov.uk
+  resources:
+  - jobrequestreviews/finalizers
+  - jobrequests/finalizers
+  verbs: ["update"]
+- apiGroups:
+  - platform.publishing.service.gov.uk
+  resources:
+  - jobrequestreviews/status
+  - jobrequests/status
+  verbs: ["get", "list", "watch", "create", "update", "delete", "deletecollection"]
+- apiGroups: [""]
+  resources:
+    - pods
+    - pods/log
+    - events
+  verbs: ["get", "list", "watch", "delete", "deletecollection"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "delete", "deletecollection"]
+- apiGroups: ["batch"]
+  resources: ["jobs"]
+  verbs: ["get", "list", "watch", "delete", "deletecollection"]
+{{- end }}

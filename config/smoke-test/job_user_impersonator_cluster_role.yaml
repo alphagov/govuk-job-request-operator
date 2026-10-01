@@ -1,0 +1,18 @@
+{{- if eq .Values.govukEnvironment "production" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ include "govuk-job-request-operator.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  name: {{ include "govuk-job-request-operator.resourceName" (dict "suffix" "smoke-user-impersonator" "context" $) }}
+rules:
+  - apiGroups: [""]
+    resources: ["users"]
+    verbs: ["impersonate"]
+    resourceNames:
+      - "arn:aws:sts::123456789012:assumed-role/job.req-developer/e2e"
+      - "arn:aws:sts::123456789012:assumed-role/job.rev-developer/e2e"
+{{- end }}

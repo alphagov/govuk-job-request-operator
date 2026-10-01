@@ -19,10 +19,8 @@ import (
 const (
 	smokeTestServiceAccountName = "smoke-test-runner-sa"
 	clusterName                 = "cluster"
-	// appNamespace is the namespace used by the smoke tests to create JobRequest and JobRequestReview resources
+	// namespace used by the smoke tests to create JobRequest and JobRequestReview resources
 	appNamespace = "job-request-operator-smoke-test"
-	// controllerNamespace matches the default cluster deployment namespace.
-	controllerNamespace = "job-request-operator"
 )
 
 func TestSmokeE2E(t *testing.T) {

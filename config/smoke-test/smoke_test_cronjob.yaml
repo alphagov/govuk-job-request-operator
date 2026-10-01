@@ -1,0 +1,39 @@
+{{- if eq .Values.govukEnvironment "production" }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "govuk-job-request-operator.resourceName" (dict "suffix" "smoke-test-runner" "context" $) }}
+  namespace: job-request-operator-smoke-test
+spec:
+  schedule: "*/15 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "govuk-job-request-operator.resourceName" (dict "suffix" "smoke-test-runner" "context" $) }}
+          automountServiceAccountToken: true
+          restartPolicy: Never
+          containers:
+            - name: kubectl
+              image: ghcr.io/alphagov/govuk/govuk-toolbox-image:v63
+              env:
+                - name: CGO_ENABLED
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                runAsNonRoot: true
+                runAsUser: 1001
+                runAsGroup: 1001
+                seccompProfile:
+                  type: RuntimeDefault
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -e
+                  git clone https://github.com/alphagov/govuk-job-request-operator.git
+                  cd govuk-job-request-operator
+                  make smoke
+{{- end }}

@@ -254,7 +254,7 @@ endef
 ## Helm binary to use for deploying the chart
 HELM ?= helm
 ## Namespace to deploy the Helm release
-HELM_NAMESPACE ?= govuk-job-request-operator-system
+HELM_NAMESPACE ?= job-request-operator
 ## Name of the Helm release
 HELM_RELEASE ?= govuk-job-request-operator
 ## Path to the Helm chart directory
@@ -270,14 +270,19 @@ build-helm-chart: ## Build the Helm chart
 package-helm-chart: build-installer ## Package the Helm chart for release
 	$(KUBEBUILDER) edit --plugins helm/v2-alpha --force
 	
-	# patch values.yaml to set name prefix
+	# Patch values.yaml to set name prefix
 	yq -i '.fullnameOverride = "job-request-operator"' dist/chart/values.yaml
 
-	# patch values.yaml to point to GHCR by default
+	# Patch values.yaml to point to GHCR by default
 	yq -i '.manager.image.repository = "ghcr.io/alphagov/govuk/govuk-job-request-operator"' dist/chart/values.yaml
-	# patch metrics.secure: false
+
+	# Patch metrics.secure: false
 	yq -i '.metrics.secure = false' dist/chart/values.yaml
-	# patch Chart.yaml to set org.opencontainers.image.source
+
+	# Copy smoke test Helm templates into the Helm chart
+	cp -R config/smoke-test dist/chart/templates
+
+	# Patch Chart.yaml to set org.opencontainers.image.source
 	yq -i '.annotations."org.opencontainers.image.source" = "https://github.com/alphagov/govuk-job-request-operator"' dist/chart/Chart.yaml
 	CREATED_TIME=$$(date +%Y%m%dT%H:%M:%SZ) \
         yq -i '.annotations."org.opencontainers.image.created" = strenv(CREATED_TIME)' dist/chart/Chart.yaml

@@ -46,6 +46,9 @@ const serviceAccountName = "govuk-job-request-operator-controller-manager"
 // metricsServiceName is the name of the metrics service of the project
 const metricsServiceName = "govuk-job-request-operator-controller-manager-metrics-service"
 
+// namespace where the operator is deployed in
+const controllerNamespace = "job-request-operator"
+
 // users
 const (
 	jobRequestImpersonateUser = "arn:aws:sts::123456789012:assumed-role/job.req-developer/e2e"
