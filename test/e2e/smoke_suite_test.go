@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	smokeTestServiceAccountName = "smoke-test-runner-sa"
+	smokeTestServiceAccountName = "job-request-operator-smoke-test-runner"
 	clusterName                 = "cluster"
 	// namespace used by the smoke tests to create JobRequest and JobRequestReview resources
 	appNamespace = "job-request-operator-smoke-test"
