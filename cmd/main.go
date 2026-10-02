@@ -143,6 +143,7 @@ func main() {
 	}
 
 	if err := (&controller.JobRequestReconciler{
+		ReconcilerName:  "JobRequestReconciler",
 		CacheClient:     mgr.GetClient(),
 		ApiServerClient: mgr.GetAPIReader(),
 		Scheme:          mgr.GetScheme(),
@@ -156,6 +157,7 @@ func main() {
 	}
 
 	if err := (&controller.JobRequestReviewReconciler{
+		ReconcilerName:  "JobRequestReviewReconciler",
 		CacheClient:     mgr.GetClient(),
 		ApiServerClient: mgr.GetAPIReader(),
 		Scheme:          mgr.GetScheme(),

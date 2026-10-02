@@ -35,26 +35,16 @@ import (
 	batch "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	"k8s.io/client-go/tools/events"
-
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/go-logr/logr"
 )
 
 type JobRequestReconciler struct {
-	CacheClient     client.Client
-	ApiServerClient client.Reader
-	Scheme          *runtime.Scheme
-	Recorder        events.EventRecorder
-	Log             logr.Logger
-	ResourceTtl     time.Duration
-	CustomMetrics   platformv1.RequestCustomMetrics
+	CustomMetrics platformv1.RequestCustomMetrics
+	Reconciler[*platformv1.JobRequest]
 }
 
 // +kubebuilder:rbac:groups=platform.publishing.service.gov.uk,resources=jobrequests,verbs=get;list;watch;create;update;patch;delete
@@ -66,21 +56,22 @@ type JobRequestReconciler struct {
 
 func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	jobRequest := &platformv1.JobRequest{}
+	jobRequest.Name = req.Name
+	jobRequest.Namespace = req.Namespace
+
 	r.CustomMetrics.MetricLabels = prometheus.Labels{
 		"namespaced_name": req.Namespace + "/" + req.Name,
 		// nolint:goconst
 		"state": "",
 	}
 
-	r.Log.Info("[JobRequestReconciler] Received JobRequest", "jobRequestName", req.Name, "namespace", req.Namespace)
+	r.LogInfo("Received JobRequest.", jobRequest)
 	r.CustomMetrics.ReceivedTotal.Inc()
 
 	found := r.getJobRequest(ctx, req.NamespacedName, jobRequest)
 
 	if !found {
-		r.Log.Info(
-			"[JobRequestReconciler] JobRequest not found. Ending reconciliation.",
-			"jobRequestName", req.Name, "namespace", req.Namespace)
+		r.LogReconcillationExit(ReconcilliationFinished, "JobRequest not found", jobRequest, nil)
 		r.CustomMetrics.ErrorGettingRequestTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
@@ -89,54 +80,47 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	age := time.Since(jobRequest.CreationTimestamp.Time)
 	if age >= r.ResourceTtl {
-		r.Log.Info(
-			"[JobRequestReconciler] Pruning old JobRequest",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
-		)
+		r.LogInfo("Pruning old JobRequest.", jobRequest, "age", age)
 		err := r.CacheClient.Delete(ctx, jobRequest)
 
 		if apierrors.IsNotFound(err) || apierrors.IsGone(err) {
-			r.Log.Info(
-				"[JobRequestReconciler] JobRequest is already deleted. Ending reconciliation.",
-				"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
-			)
+			r.LogReconcillationExit(ReconcilliationFinished, "JobRequest is already deleted.", jobRequest, nil, "age", age)
 			r.CustomMetrics.ErrorAlreadyDeletedTotal.With(r.CustomMetrics.MetricLabels).Inc()
 			r.CustomMetrics.RequeueTotal.With(r.CustomMetrics.MetricLabels).Inc()
 			return ctrl.Result{}, nil
 		}
 
 		if err != nil {
-			r.Log.Error(err,
-				"[JobRequestReconciler] Unexpected error when trying to delete JobRequest. Reconcile will try again.",
-				"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
+			r.LogReconcillationExit(ReconcilliationIncomplete,
+				"Unexpected error when trying to delete JobRequest.",
+				jobRequest, err, "age", age,
 			)
 			r.CustomMetrics.ErrorDeletingByTtlTotal.With(r.CustomMetrics.MetricLabels).Inc()
 			r.CustomMetrics.RequeueTotal.With(r.CustomMetrics.MetricLabels).Inc()
 			return ctrl.Result{}, err
 		}
 
-		r.Log.Info(
-			"[JobRequestReconciler] JobRequest deleted after expired ttl. Ending reconciliation.",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "age", age,
+		r.LogReconcillationExit(ReconcilliationFinished,
+			"JobRequest deleted after expired TTL.",
+			jobRequest, nil, "age", age,
 		)
 		r.CustomMetrics.DeletedByTtlTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
 
 	if endReconcileIfInTerminalState(jobRequest.Status.State) {
-		r.Log.Info(
-			"[JobRequestReconciler] JobRequest reached it's terminal state. Ending reconciliation.",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequest.Status.State,
-		)
+		r.LogReconcillationExit(ReconcilliationFinished,
+			"JobRequest reached it's terminal state.",
+			jobRequest, nil, "state", jobRequest.Status.State)
 		r.CustomMetrics.AlreadyInTerminalStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
 
 	if !r.validateRequestedByAnnotation(ctx, jobRequest) {
 		requestedByAnnotation, _ := jobRequest.GetRequestedBy()
-		r.Log.Info(
-			"[JobRequestReconciler] Could not validate requestedByAnnotation annotation on JobRequest. Ending reconciliation.",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "jobRequestAnnotation", requestedByAnnotation,
+		r.LogReconcillationExit(ReconcilliationFinished,
+			"Could not validate requested-by annotation annotation on JobRequest.",
+			jobRequest, nil, "requestedByAnnotation", requestedByAnnotation,
 		)
 		r.CustomMetrics.ErrorRequestedByAnnoTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
@@ -144,10 +128,9 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	resourceList, err := r.getTargetResource(ctx, jobRequest)
 	if err != nil {
-		r.Log.Error(err,
-			"[JobRequestReconciler] error getting target resource for JobRequest. Reconcile will try again.",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
-			"targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name,
+		r.LogReconcillationExit(ReconcilliationIncomplete,
+			"Error getting target resource for JobRequest.",
+			jobRequest, err, "targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name,
 		)
 		r.CustomMetrics.ErrorGettingRequestTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		r.CustomMetrics.RequeueTotal.With(r.CustomMetrics.MetricLabels).Inc()
@@ -155,10 +138,9 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 	}
 
 	if len(resourceList.Items) == 0 {
-		r.Log.Info(
-			"[JobRequestReconciler] Couldn't find the target resource for JobRequest. Ending reconciliation.",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
-			"targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name,
+		r.LogReconcillationExit(ReconcilliationFinished,
+			"Couldn't find the target resource for JobRequest.",
+			jobRequest, nil, "targetResource", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name,
 		)
 		r.CustomMetrics.NoneFoundTargetResourceTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
@@ -166,32 +148,29 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 
 	jobTemplate := r.createJobTemplate(ctx, &resourceList.Items[0], *jobRequest)
 	if jobTemplate == nil {
-		r.Log.Info(
-			"[JobRequestReconciler] Couldn't create Job template for JobRequest. Ending reconciliation.",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
+		r.LogReconcillationExit(ReconcilliationFinished,
+			"Couldn't create Job template for JobRequest.",
+			jobRequest, nil,
 		)
 		r.CustomMetrics.ErrorCreateJobTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	}
 
 	jobRequestState := r.calculateState(ctx, jobRequest)
-	r.Log.Info(
-		"[JobRequestReconciler] Calculated state for JobRequest.",
-		"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequestState,
-	)
+	r.LogInfo("Calculated state for JobRequest.", jobRequest, "state", jobRequestState)
 
 	result, err := r.handleState(ctx, jobRequestState, jobRequest, jobTemplate, req.NamespacedName)
 	if err != nil {
-		r.Log.Error(err,
-			"[JobRequestReconciler] Error handling state for JobRequest. Reconcile will try again.",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "calculatedState", jobRequestState,
+		r.LogReconcillationExit(ReconcilliationIncomplete,
+			"Error handling state for JobRequest.",
+			jobRequest, err, "calculatedState", jobRequestState,
 		)
 		return result, err
 	}
 
-	r.Log.Info(
-		"[JobRequestReconciler] Handled state of JobRequest successful. Ending reconciliation.",
-		"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "state", jobRequest.Status.State,
+	r.LogReconcillationExit(ReconcilliationFinished,
+		"Handled state of JobRequest successfully.",
+		jobRequest, nil, "state", jobRequest.Status.State,
 	)
 	r.CustomMetrics.MetricLabels["state"] = string(jobRequest.Status.State)
 	r.CustomMetrics.SuccessfulReconcileTotal.With(r.CustomMetrics.MetricLabels)
@@ -201,10 +180,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context, jobRequest *platformv1.JobRequest) bool {
 	requestedBy, err := jobRequest.GetRequestedBy()
 	if err != nil {
-		r.Log.Error(err,
-			"[JobRequestReconciler] JobRequest Missing requested-by field",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace,
-		)
+		r.LogError(err, "JobRequest Missing requested-by annotation.", jobRequest)
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
 		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestMalformed)
@@ -214,9 +190,9 @@ func (r *JobRequestReconciler) validateRequestedByAnnotation(ctx context.Context
 
 	_, err = platformv1.ParseUserIdentityFromARN(requestedBy)
 	if err != nil {
-		r.Log.Error(err,
-			"[JobRequestReconciler] JobRequest has invalid requested-by field",
-			"jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace, "requestedBy", requestedBy,
+		r.LogError(
+			err, "JobRequest has invalid requested-by field.",
+			jobRequest, "requestedBy", requestedBy,
 		)
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", err.Error())
 		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
@@ -233,14 +209,14 @@ func (r *JobRequestReconciler) getJobRequest(ctx context.Context, namespaceName 
 	if err != nil {
 		var errorLogMessage string
 		if apierrors.IsNotFound(err) {
-			errorLogMessage = "[JobRequestReconciler] JobRequest resource not found. " +
+			errorLogMessage = "JobRequest not found. " +
 				"This is usually because the resource was deleted or not created. " +
-				"Ignoring and ending reconciliation"
+				"Ignoring error."
 		} else {
-			errorLogMessage = "[JobRequestReconciler] Failed to deserialize JobRequest. Ignoring and ending reconciliation"
+			errorLogMessage = "Failed to deserialize JobRequest. Ignoring error."
 		}
 
-		r.Log.Error(err, errorLogMessage, "jobRequestName", jobRequest.Name, "namespace", jobRequest.Namespace)
+		r.LogError(err, errorLogMessage, jobRequest)
 		return false
 	}
 
@@ -265,14 +241,13 @@ func (r *JobRequestReconciler) getTargetResource(ctx context.Context, jobRequest
 
 	err := r.ApiServerClient.List(ctx, &deploymentList, opts...)
 	if err != nil {
-		r.Log.Error(err, "Failed to retrieve target resource")
+		r.LogError(err, "Failed to retrieve target resource.", jobRequest)
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Api Error", "None", fmt.Sprintf("Error when trying to list target resources from the API: %s", err.Error()))
 		return deploymentList, err
 	}
 
 	if len(deploymentList.Items) == 0 {
-		err := fmt.Errorf("target resource %s could not be found", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name)
-		r.Log.Error(err, "Failed to retrieve target resource")
+		r.LogInfo("Target resource could not be found.", jobRequest, "targetResourceName", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name)
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Target resource could not be found")
 		r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestMalformed)
@@ -286,8 +261,13 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	targetContainer := retrieveContainerFromResource(resource, jobRequest)
 
 	if len(targetContainer) == 0 {
-		err := errors.New("container not found in resource")
-		r.Log.Error(err, "Target container, to create the job from is not found in target resource")
+		r.LogError(
+			errors.New("target container not found in target resource"),
+			"Target container, to create the job from, is not found in target resource.",
+			&jobRequest,
+			"targetResourceName", jobRequest.Spec.ContainerFrom.PodSpecFrom.Name,
+			"targetContainerName", jobRequest.Spec.ContainerFrom.ContainerName,
+		)
 		r.Recorder.Eventf(&jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Target container on Deployment could not be found")
 		r.setState(ctx, &jobRequest, platformv1.JobRequestMalformed)
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestMalformed)
@@ -310,7 +290,7 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	maps.Copy(job.Labels, resource.Labels)
 
 	if err := ctrl.SetControllerReference(&jobRequest, &job, r.Scheme); err != nil {
-		r.Log.Error(err, "Failed to set ControllerReference on Job. Another OwnerReference has already been set.")
+		r.LogError(err, "Failed to set ControllerReference on Job. Another OwnerReference has already been set.", &jobRequest)
 		r.Recorder.Eventf(&jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "ControllerReference could not be set on Job as another OwnerReference has already been set.")
 		r.setState(ctx, &jobRequest, platformv1.JobRequestMalformed)
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestMalformed)
@@ -343,12 +323,12 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 	}
 
 	if err := r.ApiServerClient.List(ctx, jobRequestReviewList, opts...); err != nil {
-		r.Log.Error(err, "Failed to retrieve JobRequestReview")
+		r.LogError(err, "Failed to retrieve JobRequestReview.", jobRequest)
 		return platformv1.JobRequestPending
 	}
 
 	if len(jobRequestReviewList.Items) == 0 {
-		r.Log.Info("No JobRequestReview found for JobRequest", "jobRequestName", jobRequest.Name, "namespace", jobRequest.GetNamespace())
+		r.LogInfo("No JobRequestReview found for JobRequest.", jobRequest)
 		if jobRequest.Status.State == "" {
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Pending", "None", "JobRequest is waiting for a JobRequestReview")
 			return platformv1.JobRequestPending
@@ -388,7 +368,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 			r.CustomMetrics.ApprovedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 			err = r.CacheClient.Create(ctx, jobTemplate)
 			if err != nil {
-				r.Log.Error(err, "Failed to create Job resource")
+				r.LogError(err, "Failed to create Job resource", jobRequest)
 				r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "Malformed", "None", "Failed to create Job")
 				r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 				r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestMalformed)
@@ -398,19 +378,20 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 			}
 
 			jobRequest.Status.JobName = jobTemplate.GetName()
-			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Started", "None", "Job is created")
+			r.LogInfo("Job created", jobRequest, "jobName", jobTemplate.GetName())
+			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Started", "None", "Job created")
 			r.setState(ctx, jobRequest, platformv1.JobRequestStarted)
 			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestStarted)
 			r.CustomMetrics.StartedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 			return ctrl.Result{}, nil
 		case err != nil: // Unexpected error
-			r.Log.Error(err, "Failed to check if Job exists when creating JobRequest")
+			r.LogError(err, "Failed to check if Job exists when creating JobRequest", jobRequest)
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, "JobLookupFailed", "None", "Failed to perform a search for existing jobs")
 			return ctrl.Result{}, err
 
 		default: // Job is found, but it shouldn't have been present when entering the approved state
-			r.Log.Error(nil, "Job already exists", "JobRequest", jobRequest.GetName(), "Job", jobNamespaceName)
+			r.LogError(nil, "Job already exists", jobRequest, "jobName", jobNamespaceName.Name)
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestConflicted), "None", "Job %s already exists. JobRequest is Conflicted", jobNamespaceName)
 
 			r.setState(ctx, jobRequest, platformv1.JobRequestConflicted)
@@ -431,10 +412,11 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 			if apierrors.IsNotFound(err) {
 				errorLogMessage = "Job not found."
 			} else {
-				errorLogMessage = "Failed to deserialize Job. Ignoring and ending reconciliation"
+				errorLogMessage = "Failed to deserialize Job."
 			}
-			r.Log.Error(err, errorLogMessage)
-			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", "Job could not be found")
+
+			r.LogError(err, errorLogMessage+" Ignoring.", jobRequest, "jobName", job.Name)
+			r.Recorder.Eventf(jobRequest, job, corev1.EventTypeWarning, string(platformv1.JobRequestMalformed), "None", errorLogMessage)
 
 			r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestMalformed)
@@ -445,7 +427,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 		// Retrieve the JobRequest to ensure we have the latest version
 		found := r.getJobRequest(ctx, namespaceName, jobRequest)
 		if !found {
-			r.Log.Info("[JobRequestReconciler] Job request not found. Ending reconciliation.", "jobRequestName", jobRequest.Name)
+			r.LogInfo("Job request not found.", jobRequest)
 			r.CustomMetrics.ErrorGettingRequestTotal.With(r.CustomMetrics.MetricLabels).Inc()
 			return ctrl.Result{}, nil
 		}
@@ -480,7 +462,7 @@ func (r *JobRequestReconciler) setState(ctx context.Context, jobRequest *platfor
 	jobRequest.Status.State = state
 	err := r.CacheClient.Status().Update(ctx, jobRequest)
 	if err != nil {
-		r.Log.Error(err, fmt.Sprintf("Failed to update status of JobRequest %s to %s", jobRequest.Name, state))
+		r.LogError(err, "Failed to update state of JobRequest", jobRequest, "toState", string(state))
 	}
 }
 
