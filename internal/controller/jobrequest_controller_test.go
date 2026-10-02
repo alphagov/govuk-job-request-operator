@@ -127,7 +127,7 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 			Consistently(ctx, func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(eventList.Items).To(BeEmpty())
-			}, 10*time.Second, 1*time.Second).Should(Succeed())
+			}, 2*time.Second, 1*time.Second).Should(Succeed())
 		})
 
 		AfterEach(func(ctx context.Context) {
