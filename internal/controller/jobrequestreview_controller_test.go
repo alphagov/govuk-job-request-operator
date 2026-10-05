@@ -49,7 +49,6 @@ import (
 var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func() {
 	Context("When reconciling a resource", func() {
 		managerCtx, managerCancel := context.WithCancel(context.Background())
-		SetDefaultEventuallyTimeout(10 * time.Second)
 
 		reviewNamespaceName := "apps-review"
 		jobRequestName := "request"
@@ -104,7 +103,10 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			By("verify events are empty")
 			eventList := &eventsv1.EventList{}
 
-			Eventually(ctx, func(g Gomega) {
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
+			Eventually(eventuallyCtx, func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(eventList.Items).To(BeEmpty())
 			}, 1*time.Minute, 5*time.Second).Should(Succeed())
@@ -422,7 +424,10 @@ var _ = Describe("JobRequestReview Pruning", Ordered, ContinueOnFailure, func() 
 	expectPruned := func(ctx context.Context) {
 		reconciler := reconcilerWithTtl(100 * time.Millisecond)
 
-		Eventually(ctx, func(g Gomega) {
+		eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+		defer cancelFunc()
+
+		Eventually(eventuallyCtx, func(g Gomega) {
 			result, err := reconcile(ctx, reconciler)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(result).To(Equal(ctrl.Result{}))
@@ -500,7 +505,11 @@ var _ = Describe("JobRequestReview Pruning", Ordered, ContinueOnFailure, func() 
 
 			By("reconciling within the TTL so the JobRequestReview reaches its state")
 			jobRequestReview := &platformv1.JobRequestReview{}
-			Eventually(ctx, func(g Gomega) {
+
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
+			Eventually(eventuallyCtx, func(g Gomega) {
 				_, err := reconcile(ctx, reconcilerWithTtl(defaultTestResourceTtl))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())

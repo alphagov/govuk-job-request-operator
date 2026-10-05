@@ -67,7 +67,6 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 		utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 		utilruntime.Must(platformv1.AddToScheme(scheme))
 		managerContext, managerCancel := context.WithCancel(context.Background())
-		SetDefaultEventuallyTimeout(10 * time.Second)
 
 		appNamespaceName := "apps"
 		deploymentName := "deployment"
@@ -192,7 +191,10 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 
 			jobList := &batch.JobList{}
 
-			Eventually(ctx, func(g Gomega) {
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
+			Eventually(eventuallyCtx, func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 				g.Expect(jobList.Items).To(HaveLen(1))
 				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
@@ -293,7 +295,10 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 
 			jobList := &batch.JobList{}
 
-			Eventually(ctx, func(g Gomega) {
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
+			Eventually(eventuallyCtx, func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 				g.Expect(jobList.Items).To(HaveLen(1))
 			}).Should(Succeed())
@@ -317,8 +322,11 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				platformv1.JobRequestStarted,
 			})
 
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
 			jobList := &batch.JobList{}
-			Eventually(ctx, func(g Gomega) {
+			Eventually(eventuallyCtx, func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 				g.Expect(jobList.Items).To(HaveLen(1))
 				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
@@ -421,7 +429,10 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 
 			createJobRequestReview(ctx, k8sClient, jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
 
-			Eventually(ctx, func(g Gomega) {
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
+			Eventually(eventuallyCtx, func(g Gomega) {
 				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
 				g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestMalformed))
 			}).Should(Succeed())
@@ -451,8 +462,12 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 
 			existingJob := jobBuilder(jobRequest)
 			Expect(k8sClient.Create(ctx, existingJob)).To(Succeed())
+
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
 			jobList := &batch.JobList{}
-			Eventually(ctx, func(g Gomega) {
+			Eventually(eventuallyCtx, func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 				g.Expect(jobList.Items).To(HaveLen(1))
 				g.Expect(jobList.Items[0].GetName()).To(Equal(jobRequestName))
@@ -480,7 +495,10 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				jobRequest.Annotations[platformv1.JobRequestRequestedByAnnotation] = requestedByAnnotation
 				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
 
-				Eventually(ctx, func(g Gomega) {
+				eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+				defer cancelFunc()
+
+				Eventually(eventuallyCtx, func(g Gomega) {
 					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
 					g.Expect(jobRequest.Status.State).To(Equal(expectedJRStatus))
 				}).Should(Succeed())
@@ -612,7 +630,11 @@ var _ = Describe("JobRequest Pruning", Ordered, ContinueOnFailure, func() {
 			)
 
 			By("reconciling until the JobRequest is older than the resource TTL")
-			Eventually(ctx, func(g Gomega) {
+
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
+			Eventually(eventuallyCtx, func(g Gomega) {
 				result, err := reconcile(ctx, reconciler)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(result).To(Equal(ctrl.Result{}))
