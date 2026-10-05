@@ -1,11 +1,14 @@
 package controller
 
 import (
+	"context"
+
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func jobRequestBuilder(jobRequestName, resourceName, resourceNamespace, containerName string) *platformv1.JobRequest {
@@ -132,4 +135,31 @@ func jobBuilder(jobRequest *platformv1.JobRequest) *batchv1.Job {
 	}
 
 	return job
+}
+
+func createDeployment(ctx context.Context, k8sClient client.Client, deploymentName, namespace string) *appsv1.Deployment {
+	By("Creating a deployment")
+	deployment := deploymentBuilder(deploymentName, namespace)
+
+	Expect(k8sClient.Create(ctx, deployment)).To(Succeed())
+
+	return deployment
+}
+
+func createJobRequest(ctx context.Context, k8sClient client.Client, requestName, deploymentName, namespace, containerName string) *platformv1.JobRequest {
+	By(fmt.Sprintf("Creating JobRequest %s", requestName))
+	jobRequest := jobRequestBuilder(requestName, deploymentName, namespace, containerName)
+
+	Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
+
+	return jobRequest
+}
+
+func createJobRequestReview(ctx context.Context, k8sClient client.Client, requestName, namespace, reviewName, decision string) *platformv1.JobRequestReview {
+	By(fmt.Sprintf("Creating JobRequestReview %s which reviews JobRequest %s as %s", reviewName, requestName, decision))
+	jobRequestReview := jobRequestReviewBuilder(requestName, namespace, reviewName, decision)
+
+	Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+
+	return jobRequestReview
 }
