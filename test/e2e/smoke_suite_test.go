@@ -6,14 +6,13 @@ package e2e
 import (
 	"context"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/alphagov/govuk-job-request-operator/test/utils"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 )
 
 const (
@@ -36,30 +35,34 @@ func readServiceAccountToken() string {
 
 var _ = BeforeSuite(func(ctx context.Context) {
 	By("Retrieving cluster information for smoke tests")
-	cmd := exec.CommandContext(ctx, "kubectl", "config", "set-cluster", clusterName,
-		"--server=https://"+os.Getenv("KUBERNETES_SERVICE_HOST")+":"+os.Getenv("KUBERNETES_SERVICE_PORT"),
-		"--certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-	)
-	_, err := utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to configure cluster information for kubectl")
+	homeDir, err := os.UserHomeDir()
+	server := "https://" + os.Getenv("KUBERNETES_SERVICE_HOST") + ":" + os.Getenv("KUBERNETES_SERVICE_PORT")
+	certificateAuthority := "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+	config := api.NewConfig()
+
+	config.Clusters[clusterName] = &api.Cluster{
+		Server:                server,
+		InsecureSkipTLSVerify: false,
+		CertificateAuthority:  certificateAuthority,
+	}
 
 	By("Setting service account credentials for smoke tests")
-	cmd = exec.CommandContext(ctx, "kubectl", "config", "set-credentials", smokeTestServiceAccountName,
-		"--token", readServiceAccountToken(),
-	)
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to configure in-cluster kubectl credentials")
+	config.AuthInfos[smokeTestServiceAccountName] = &api.AuthInfo{
+		Token: readServiceAccountToken(),
+	}
 
-	By("Setting up kubectl in-cluster context for smoke tests")
-	cmd = exec.CommandContext(ctx, "kubectl", "config", "set-context", clusterName,
-		"--cluster", clusterName,
-		"--user", smokeTestServiceAccountName,
-	)
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to configure kubectl context")
+	By("Setting up kubectl cluster context for smoke tests")
+	config.Contexts[clusterName] = &api.Context{
+		Cluster:   clusterName,
+		AuthInfo:  smokeTestServiceAccountName,
+		Namespace: appNamespace,
+	}
 
-	By("Use the in-cluster context for smoke tests")
-	cmd = exec.CommandContext(ctx, "kubectl", "config", "use-context", clusterName)
-	_, err = utils.Run(cmd)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to select in-cluster kubectl context")
+	By("Use the cluster context for smoke tests")
+	config.CurrentContext = clusterName
+
+	By("Write kubeconfig for smoke tests")
+	err = clientcmd.WriteToFile(*config, homeDir+"/.kube/config")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to write kubeconfig for smoke tests")
 })

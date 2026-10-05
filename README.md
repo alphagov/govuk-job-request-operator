@@ -196,7 +196,7 @@ In order for `gopls` to pick up the `test/e2e` package ensure your IDE settings 
 ```
 {
     "go.buildFlags": [
-        "-tags=e2e"
+        "-tags=e2e,smoke"
     ]
 }
 ```
@@ -207,7 +207,7 @@ In neovim add the following to your gopls lsp setup:
 require('lspconfig').gopls.setup({
   settings = {
     gopls = {
-      buildFlags = { "-tags=e2e" },
+      buildFlags = { "-tags=e2e,smoke" },
     },
   },
 })
