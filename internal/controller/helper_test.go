@@ -177,10 +177,6 @@ func expectJobRequestToBePending(ctx context.Context, k8sClient client.Client, j
 	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestPending)
 }
 
-func expectJobRequestToBeApproved(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
-	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestApproved)
-}
-
 func expectJobRequestToBeMalformed(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
 	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed)
 }
@@ -216,7 +212,7 @@ func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Cl
 }
 
 func expectJobRequestToHaveCurrentState(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, currentState platformv1.JobRequestState) {
-	By(fmt.Sprintf("Waiting for Job Request to have state %s", finalState))
+	By(fmt.Sprintf("Waiting for Job Request to have state %s", currentState))
 	namespacedName := types.NamespacedName{
 		Name:      jobRequest.Name,
 		Namespace: jobRequest.Namespace,
