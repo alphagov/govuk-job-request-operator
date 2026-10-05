@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -11,9 +12,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const eventuallyTimeout = 10 * time.Second
 
 func jobRequestBuilder(jobRequestName, resourceName, resourceNamespace, containerName string) *platformv1.JobRequest {
 	return &platformv1.JobRequest{
@@ -166,6 +171,92 @@ func createJobRequestReview(ctx context.Context, k8sClient client.Client, reques
 	Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 	return jobRequestReview
+}
+
+func expectJobRequestToBePending(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
+	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestPending)
+}
+
+func expectJobRequestToBeApproved(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
+	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestApproved)
+}
+
+func expectJobRequestToBeMalformed(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
+	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed)
+}
+
+func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, expectedStates []platformv1.JobRequestState) *eventsv1.EventList {
+	By(fmt.Sprintf("Waiting for Job Request to have gone through states %v", expectedStates))
+	namespacedName := types.NamespacedName{
+		Name:      jobRequest.Name,
+		Namespace: jobRequest.Namespace,
+	}
+
+	eventList := &eventsv1.EventList{}
+	eventOpts := []client.ListOption{
+		client.MatchingFields{"reportingController": "jobrequest-controller"},
+	}
+
+	finalState := expectedStates[len(expectedStates)-1]
+
+	eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+	defer cancelFunc()
+
+	Eventually(eventuallyCtx, func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequest)).To(Succeed())
+		g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+		g.Expect(jobRequest.Status.State).To(Equal(finalState))
+		g.Expect(eventList.Items).To(HaveLen(len(expectedStates)))
+		for i, expectedState := range expectedStates {
+			g.Expect(eventList.Items[i].Reason).To(Equal(string(expectedState)))
+		}
+	}).Should(Succeed())
+
+	return eventList
+}
+
+func expectJobRequestToHaveCurrentState(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, currentState platformv1.JobRequestState) {
+	By(fmt.Sprintf("Waiting for Job Request to have state %s", currentState))
+	namespacedName := types.NamespacedName{
+		Name:      jobRequest.Name,
+		Namespace: jobRequest.Namespace,
+	}
+
+	eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+	defer cancelFunc()
+
+	Eventually(eventuallyCtx, func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequest)).To(Succeed())
+		g.Expect(jobRequest.Status.State).To(Equal(currentState))
+	}).Should(Succeed())
+}
+
+func expectJobRequestToHaveFinalState(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, finalState platformv1.JobRequestState) *eventsv1.EventList {
+	By(fmt.Sprintf("Waiting for Job Request to have reached state %s", finalState))
+	namespacedName := types.NamespacedName{
+		Name:      jobRequest.Name,
+		Namespace: jobRequest.Namespace,
+	}
+
+	eventList := &eventsv1.EventList{}
+	eventOpts := []client.ListOption{
+		client.MatchingFields{"reportingController": "jobrequest-controller"},
+	}
+
+	eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+	defer cancelFunc()
+
+	Eventually(eventuallyCtx, func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequest)).To(Succeed())
+		g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+		g.Expect(jobRequest.Status.State).To(Equal(finalState))
+
+		numberOfEvents := len(eventList.Items)
+		finalEvent := eventList.Items[numberOfEvents-1]
+		g.Expect(finalEvent.Reason).To(Equal(string(finalState)))
+	}).Should(Succeed())
+
+	return eventList
 }
 
 func updateJobRequestStatus(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, status platformv1.JobRequestStatus) {
