@@ -216,7 +216,7 @@ func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Cl
 }
 
 func expectJobRequestToHaveCurrentState(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, currentState platformv1.JobRequestState) {
-	By(fmt.Sprintf("Waiting for Job Request to have state %s", currentState))
+	By(fmt.Sprintf("Waiting for Job Request to have state %s", finalState))
 	namespacedName := types.NamespacedName{
 		Name:      jobRequest.Name,
 		Namespace: jobRequest.Namespace,
@@ -313,7 +313,7 @@ func expectJobRequestReviewToHaveFinalState(ctx context.Context, k8sClient clien
 }
 
 func expectJobRequestReviewToHaveCurrentState(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview, currentState platformv1.JobRequestReviewState) {
-	By(fmt.Sprintf("Waiting for Job Request Review to have state %s", currentState))
+	By(fmt.Sprintf("Waiting for Job Request Review to have d state %s", currentState))
 	namespacedName := types.NamespacedName{
 		Name:      jobRequestReview.Name,
 		Namespace: jobRequestReview.Namespace,
