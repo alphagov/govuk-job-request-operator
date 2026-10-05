@@ -2,6 +2,10 @@ package controller
 
 import (
 	"context"
+	"fmt"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	platformv1 "github.com/alphagov/govuk-job-request-operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -162,4 +166,11 @@ func createJobRequestReview(ctx context.Context, k8sClient client.Client, reques
 	Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
 	return jobRequestReview
+}
+
+func updateJobRequestStatus(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, status platformv1.JobRequestStatus) {
+	By(fmt.Sprintf("Updating JobRequest %s to state %s with review %s", jobRequest.Name, status.State, status.ReviewName))
+
+	jobRequest.Status = status
+	Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
 }
