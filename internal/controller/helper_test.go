@@ -265,3 +265,65 @@ func updateJobRequestStatus(ctx context.Context, k8sClient client.Client, jobReq
 	jobRequest.Status = status
 	Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
 }
+
+func expectJobRequestReviewToBeApproved(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview) *eventsv1.EventList {
+	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewApproved, string(platformv1.JobRequestReviewApproved))
+}
+
+func expectJobRequestReviewToBeRejected(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview) *eventsv1.EventList {
+	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewRejected, string(platformv1.JobRequestReviewRejected))
+}
+
+func expectJobRequestReviewToBeConflict(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview) *eventsv1.EventList {
+	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict))
+}
+
+func expectJobRequestReviewToBeMalformed(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview) *eventsv1.EventList {
+	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewMalformed, string(platformv1.JobRequestReviewMalformed))
+}
+
+func expectJobRequestReviewToHaveFinalState(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview, finalState platformv1.JobRequestReviewState, stateReason string) *eventsv1.EventList {
+	By(fmt.Sprintf("Waiting for Job Request Review to have reached state %s", finalState))
+	namespacedName := types.NamespacedName{
+		Name:      jobRequestReview.Name,
+		Namespace: jobRequestReview.Namespace,
+	}
+
+	eventList := &eventsv1.EventList{}
+	eventOpts := []client.ListOption{
+		client.MatchingFields{"reportingController": "jobrequestreview-controller"},
+	}
+
+	eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+	defer cancelFunc()
+
+	Eventually(eventuallyCtx, func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequestReview)).To(Succeed())
+		g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
+		g.Expect(jobRequestReview.Status.State).To(Equal(finalState))
+
+		numberOfEvents := len(eventList.Items)
+		g.Expect(numberOfEvents).NotTo(BeZero())
+
+		finalEvent := eventList.Items[numberOfEvents-1]
+		g.Expect(finalEvent.Reason).To(Equal(stateReason))
+	}).Should(Succeed())
+
+	return eventList
+}
+
+func expectJobRequestReviewToHaveCurrentState(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview, currentState platformv1.JobRequestReviewState) {
+	By(fmt.Sprintf("Waiting for Job Request Review to have state %s", currentState))
+	namespacedName := types.NamespacedName{
+		Name:      jobRequestReview.Name,
+		Namespace: jobRequestReview.Namespace,
+	}
+
+	eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+	defer cancelFunc()
+
+	Eventually(eventuallyCtx, func(g Gomega) {
+		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequestReview)).To(Succeed())
+		g.Expect(jobRequestReview.Status.State).To(Equal(currentState))
+	}).Should(Succeed())
+}
