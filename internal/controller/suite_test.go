@@ -90,7 +90,11 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func(ctx context.Context) {
 	By("tearing down the test environment")
-	Eventually(ctx, func() error {
+
+	eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+	defer cancelFunc()
+
+	Eventually(eventuallyCtx, func() error {
 		return testEnv.Stop()
 	}, time.Minute, time.Second).Should(Succeed())
 })

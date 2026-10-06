@@ -364,7 +364,7 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 		)
 		r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeNormal, string(platformv1.JobRequestPending), "None", "JobRequest has no state yet")
 		r.CustomMetrics.RequeueTotal.With(r.CustomMetrics.MetricLabels).Inc()
-		return ctrl.Result{RequeueAfter: 15 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 
 	case platformv1.JobRequestMalformed:
 		err := errors.New("JobRequest body Malformed")

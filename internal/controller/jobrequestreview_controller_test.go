@@ -25,7 +25,6 @@ package controller
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -50,7 +49,6 @@ import (
 var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func() {
 	Context("When reconciling a resource", func() {
 		managerCtx, managerCancel := context.WithCancel(context.Background())
-		SetDefaultEventuallyTimeout(10 * time.Second)
 
 		reviewNamespaceName := "apps-review"
 		jobRequestName := "request"
@@ -63,11 +61,6 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 
 		jobRequestNamespaceName := types.NamespacedName{
 			Name:      jobRequestName,
-			Namespace: reviewNamespaceName,
-		}
-
-		jobRequestReviewNamespaceName := types.NamespacedName{
-			Name:      jobRequestReviewName,
 			Namespace: reviewNamespaceName,
 		}
 
@@ -110,7 +103,10 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			By("verify events are empty")
 			eventList := &eventsv1.EventList{}
 
-			Eventually(ctx, func(g Gomega) {
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
+			Eventually(eventuallyCtx, func(g Gomega) {
 				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 				g.Expect(eventList.Items).To(BeEmpty())
 			}, 1*time.Minute, 5*time.Second).Should(Succeed())
@@ -146,211 +142,123 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 		})
 
 		It("should successfully reconcile with JobRequestReview state as JobRequestNotFound if the corresponding JobRequest doesn't exist", func(ctx context.Context) {
-			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
+			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
-			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
-
-			eventList := &eventsv1.EventList{}
-
-			Eventually(ctx, func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewNotFound))
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewNotFound)))
-			}).Should(Succeed())
+			expectJobRequestReviewToHaveFinalState(
+				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewNotFound, string(platformv1.JobRequestReviewNotFound),
+			)
 		})
 
 		It("should successfully reconcile if the corresponding JobRequest status is initially empty", func(ctx context.Context) {
-			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
-			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
+			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
-			jobRequestStatus := platformv1.JobRequestStatus{
+			eventList := expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewState(""), "Pending")
+			Expect(eventList.Items[0].Note).To(Equal("JobRequest has no state yet"))
+
+			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
 				JobName:    deploymentName,
 				State:      platformv1.JobRequestPending,
 				ReviewName: jobRequestReviewName,
-			}
+			})
 
-			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
-
-			eventList := &eventsv1.EventList{}
-
-			Eventually(ctx, func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewState("")))
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
-			}).Should(Succeed())
-
-			jobRequest.Status = jobRequestStatus
-			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
-
-			Eventually(ctx, func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewApproved))
-				g.Expect(eventList.Items).To(HaveLen(2))
-				g.Expect(eventList.Items[1].Reason).To(Equal(string(platformv1.JobRequestReviewApproved)))
-			}, 20*time.Second).Should(Succeed())
+			expectJobRequestReviewToHaveFinalState(
+				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewApproved, string(platformv1.JobRequestReviewApproved),
+			)
 		})
 
 		It("should successfully reconcile with JobRequestReview state as JobRequestReviewMalformed if the corresponding JobRequest is Malformed", func(ctx context.Context) {
-			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
-			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
 
-			jobRequestStatus := platformv1.JobRequestStatus{
+			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
 				JobName:    deploymentName,
 				State:      platformv1.JobRequestMalformed,
 				ReviewName: jobRequestReviewName,
-			}
+			})
 
-			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-			jobRequest.Status = jobRequestStatus
-			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
-			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
-			eventList := &eventsv1.EventList{}
-
-			Eventually(ctx, func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewMalformed))
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewMalformed)))
-			}).Should(Succeed())
+			expectJobRequestReviewToHaveFinalState(
+				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewMalformed, string(platformv1.JobRequestReviewMalformed),
+			)
 		})
 
 		It("should successfully reconcile with JobRequestReview state as JobRequestReviewConflict if the corresponding JobRequest is Conflicted", func(ctx context.Context) {
-			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
-			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
-
-			jobRequestStatus := platformv1.JobRequestStatus{
+			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
+			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
 				JobName:    deploymentName,
 				State:      platformv1.JobRequestConflicted,
 				ReviewName: jobRequestReviewName,
-			}
+			})
 
-			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-			jobRequest.Status = jobRequestStatus
-			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
-			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
-			eventList := &eventsv1.EventList{}
-
-			Eventually(ctx, func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewConflict))
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewConflict)))
-			}).Should(Succeed())
+			expectJobRequestReviewToHaveFinalState(
+				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict),
+			)
 		})
 
 		It("should successfully reconcile when JobRequestReview is Approved", func(ctx context.Context) {
-			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
-			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
 
-			jobRequestStatus := platformv1.JobRequestStatus{
+			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
 				State: platformv1.JobRequestPending,
-			}
+			})
 
-			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-			jobRequest.Status = jobRequestStatus
-			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
-			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
-			eventList := &eventsv1.EventList{}
+			expectJobRequestReviewToBeApproved(ctx, k8sClient, jobRequestReview)
+			expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, platformv1.JobRequestApproved)
 
-			Eventually(ctx, func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewApproved))
-				g.Expect(jobRequest.HasBeenApproved()).To(BeTrue())
-				g.Expect(jobRequest.WasReviewedBy(jobRequestReview)).To(BeTrue())
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewApproved)))
-			}).Should(Succeed())
+			Expect(jobRequest.HasBeenApproved()).To(BeTrue())
+			Expect(jobRequest.WasReviewedBy(jobRequestReview)).To(BeTrue())
 		})
 
 		It("should successfully reconcile when JobRequestReview is Rejected", func(ctx context.Context) {
-			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Rejected")
-			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
+			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
 
-			jobRequestStatus := platformv1.JobRequestStatus{
+			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
 				State: platformv1.JobRequestPending,
-			}
+			})
 
-			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-			jobRequest.Status = jobRequestStatus
-			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
-			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Rejected")
 
-			eventList := &eventsv1.EventList{}
+			expectJobRequestReviewToBeRejected(ctx, k8sClient, jobRequestReview)
+			expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejected)
 
-			Eventually(ctx, func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewRejected))
-				g.Expect(jobRequest.HasBeenRejected()).To(BeTrue())
-				g.Expect(jobRequest.WasReviewedBy(jobRequestReview)).To(BeTrue())
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewRejected)))
-			}).Should(Succeed())
+			Expect(jobRequest.HasBeenRejected()).To(BeTrue())
+			Expect(jobRequest.WasReviewedBy(jobRequestReview)).To(BeTrue())
 		})
 
 		It("should go to Malformed state when the JobRequestReview has no reviewed-by annotation", func(ctx context.Context) {
+			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
+			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
+				State: platformv1.JobRequestPending,
+			})
+
 			jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, "Rejected")
 			delete(jobRequestReview.Annotations, "platform.publishing.service.gov.uk/reviewed-by")
-
-			jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
-			jobRequestStatus := platformv1.JobRequestStatus{
-				State: platformv1.JobRequestPending,
-			}
-
-			Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-			jobRequest.Status = jobRequestStatus
-			Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
 			Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
-			eventList := &eventsv1.EventList{}
+			expectJobRequestReviewToBeMalformed(ctx, k8sClient, jobRequestReview)
 
-			Eventually(ctx, func(g Gomega) {
-				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-				g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-				g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewMalformed))
-				g.Expect(jobRequest.HasBeenReviewed()).To(BeFalse())
-				g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewMalformed)))
-			}).Should(Succeed())
+			Expect(jobRequest.HasBeenReviewed()).To(BeFalse())
 		})
 
 		DescribeTable("when the JobRequestReview reviewed-by annotation is parsed",
 			func(ctx context.Context, reviewedByAnnotation string, expectedJRRStatus platformv1.JobRequestReviewState, expectedJRStatus platformv1.JobRequestState) {
-				By("Creating the JobRequest")
-				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
-
-				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-				jobRequest.Status = platformv1.JobRequestStatus{
+				jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
+				updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
 					State: platformv1.JobRequestPending,
-				}
-				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+				})
 
 				By("Creating the JobRequestReview")
 				jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, string(platformv1.JobRequestReviewRejected))
 				jobRequestReview.Annotations[platformv1.JobRequestReviewReviewedByAnnotation] = reviewedByAnnotation
 				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
-				Eventually(ctx, func(g Gomega) {
-					g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-					g.Expect(jobRequestReview.Status.State).To(Equal(expectedJRRStatus))
-					g.Expect(jobRequest.Status.State).To(Equal(expectedJRStatus))
-				}).Should(Succeed())
+				expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, expectedJRRStatus, string(expectedJRRStatus))
+				expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, expectedJRStatus)
 			},
 			Entry("when the reviewed-by annotation is not an ARN the JobRequestReview should become Malformed",
 				"wibble", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
@@ -369,24 +277,19 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 				By("Creating the JobRequest")
 				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
 				jobRequest.Annotations[platformv1.JobRequestRequestedByAnnotation] = requester
-
 				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-				jobRequest.Status = platformv1.JobRequestStatus{
+
+				updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
 					State: platformv1.JobRequestPending,
-				}
-				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+				})
 
 				By("Creating the JobRequestReview")
 				jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, string(platformv1.JobRequestReviewRejected))
 				jobRequestReview.Annotations[platformv1.JobRequestReviewReviewedByAnnotation] = reviewer
 				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
-				Eventually(ctx, func(g Gomega) {
-					g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-					g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewConflict))
-					g.Expect(jobRequest.Status.State).To(Equal(platformv1.JobRequestPending))
-				}).Should(Succeed())
+				expectJobRequestReviewToBeConflict(ctx, k8sClient, jobRequestReview)
+				expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, platformv1.JobRequestPending)
 			},
 			Entry(
 				"with identical gds-users reviewer and requester",
@@ -412,73 +315,44 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 
 		DescribeTable("when the JobRequest has already been reviewed by another JobRequestReview",
 			func(ctx context.Context, previousJobRequestReviewState platformv1.JobRequestReviewState, jobRequestState platformv1.JobRequestState) {
-				By("Creating the Jobquest and the prior JobRequestReview")
 				previousJobRequestReviewName := "previous-job-request-review"
-				previousJobRequestReviewNamespaceName := types.NamespacedName{
-					Name:      previousJobRequestReviewName,
-					Namespace: reviewNamespaceName,
-				}
 
-				previousJobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, previousJobRequestReviewName, string(previousJobRequestReviewState))
-				jobRequest := jobRequestBuilder(jobRequestName, deploymentName, reviewNamespaceName, containerName)
-
-				By("Allowing the JobRequest to be reconciled with the prior JobRequestReview")
-				Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
-				jobRequest.Status = platformv1.JobRequestStatus{
+				jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
+				updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
 					State: platformv1.JobRequestPending,
-				}
-				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
-				Expect(k8sClient.Create(ctx, previousJobRequestReview)).To(Succeed())
+				})
 
-				Eventually(ctx, func(g Gomega) {
-					g.Expect(k8sClient.Get(ctx, previousJobRequestReviewNamespaceName, previousJobRequestReview)).To(Succeed())
-					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-					g.Expect(string(jobRequest.Status.State)).To(Equal(string(previousJobRequestReviewState)))
-					g.Expect(previousJobRequestReview.Status.State).To(Equal(previousJobRequestReviewState))
-				}).Should(Succeed())
+				previousJobRequestReview := createJobRequestReview(
+					ctx, k8sClient,
+					jobRequestName, reviewNamespaceName,
+					previousJobRequestReviewName,
+					string(previousJobRequestReviewState),
+				)
 
-				By(fmt.Sprintf("Setting the State of the JobRequest to %s", jobRequestState))
-				jobRequest.Status.State = jobRequestState
-				Expect(k8sClient.Status().Update(ctx, jobRequest)).To(Succeed())
+				expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, platformv1.JobRequestState(string(previousJobRequestReviewState)))
+				expectJobRequestReviewToHaveCurrentState(ctx, k8sClient, previousJobRequestReview, previousJobRequestReviewState)
 
-				Eventually(ctx, func(g Gomega) {
-					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-					g.Expect(jobRequest.Status.State).To(Equal(jobRequestState))
-				}).Should(Succeed())
-
-				By(fmt.Sprintf("Clearing all the Events in the %s namespace", reviewNamespaceName))
-				Expect(k8sClient.DeleteAllOf(ctx, &eventsv1.Event{}, &client.DeleteAllOfOptions{
-					DeleteOptions: client.DeleteOptions{
-						GracePeriodSeconds: new(int64(0)),
-						PropagationPolicy:  new(metav1.DeletePropagationBackground),
-					},
-					ListOptions: client.ListOptions{
-						Namespace: reviewNamespaceName,
-					},
-				})).To(Succeed())
+				updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
+					State:      jobRequestState,
+					ReviewName: previousJobRequestReviewName,
+				})
 
 				jobRequestVersion := jobRequest.ResourceVersion
 
 				By("Creating a new JobRequestReview which reviews the previous reviewed JobRequest")
-				jobRequestReview := jobRequestReviewBuilder(jobRequestName, reviewNamespaceName, jobRequestReviewName, string(platformv1.JobRequestReviewRejected))
-				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
+				jobRequestReview := createJobRequestReview(
+					ctx, k8sClient,
+					jobRequestName, reviewNamespaceName,
+					jobRequestReviewName, string(platformv1.JobRequestReviewRejected),
+				)
 
-				eventList := &eventsv1.EventList{}
+				expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict))
 
-				By("Waiting for the new JobRequestReview to go into a Conflict state")
-				Eventually(ctx, func(g Gomega) {
-					g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
-					g.Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
-
-					g.Expect(jobRequest.Status.State).To(Equal(jobRequestState))
-					g.Expect(jobRequest.ResourceVersion).To(Equal(jobRequestVersion))
-					g.Expect(jobRequest.WasReviewedBy(previousJobRequestReview)).To(BeTrue())
-					g.Expect(jobRequestReview.Status.State).To(Equal(platformv1.JobRequestReviewConflict))
-
-					g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-					g.Expect(eventList.Items).To(HaveLen(1))
-					g.Expect(eventList.Items[0].Reason).To(Equal(string(platformv1.JobRequestReviewConflict)))
-				}).Should(Succeed())
+				By("Validating the JobRequest was not modified by the Conflicted JobRequestReview")
+				Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())
+				Expect(jobRequest.Status.State).To(Equal(jobRequestState))
+				Expect(jobRequest.ResourceVersion).To(Equal(jobRequestVersion))
+				Expect(jobRequest.WasReviewedBy(previousJobRequestReview)).To(BeTrue())
 			},
 			Entry("when the jobRequestReview was Rejected and the JobRequest is now in a Rejected state", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
 			Entry("when the jobRequestReview was Approved and the JobRequest is now in a Approved state", platformv1.JobRequestReviewApproved, platformv1.JobRequestApproved),
@@ -530,7 +404,7 @@ var _ = Describe("JobRequestReview Pruning", Ordered, ContinueOnFailure, func() 
 	}
 
 	createJobRequest := func(ctx context.Context, state platformv1.JobRequestState) {
-		Expect(k8sClient.Create(ctx, deploymentBuilder(deploymentName, pruneNamespaceName))).To(Succeed())
+		createDeployment(ctx, k8sClient, deploymentName, pruneNamespaceName)
 
 		jobRequest := jobRequestBuilder(jobRequestName, deploymentName, pruneNamespaceName, containerName)
 		Expect(k8sClient.Create(ctx, jobRequest)).To(Succeed())
@@ -550,7 +424,10 @@ var _ = Describe("JobRequestReview Pruning", Ordered, ContinueOnFailure, func() 
 	expectPruned := func(ctx context.Context) {
 		reconciler := reconcilerWithTtl(100 * time.Millisecond)
 
-		Eventually(ctx, func(g Gomega) {
+		eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+		defer cancelFunc()
+
+		Eventually(eventuallyCtx, func(g Gomega) {
 			result, err := reconcile(ctx, reconciler)
 			g.Expect(err).NotTo(HaveOccurred())
 			g.Expect(result).To(Equal(ctrl.Result{}))
@@ -628,7 +505,11 @@ var _ = Describe("JobRequestReview Pruning", Ordered, ContinueOnFailure, func() 
 
 			By("reconciling within the TTL so the JobRequestReview reaches its state")
 			jobRequestReview := &platformv1.JobRequestReview{}
-			Eventually(ctx, func(g Gomega) {
+
+			eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
+			defer cancelFunc()
+
+			Eventually(eventuallyCtx, func(g Gomega) {
 				_, err := reconcile(ctx, reconcilerWithTtl(defaultTestResourceTtl))
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(k8sClient.Get(ctx, jobRequestReviewNamespaceName, jobRequestReview)).To(Succeed())
