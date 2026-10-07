@@ -189,6 +189,10 @@ See https://github.com/kubernetes-sigs/kind/issues/3795 to turn off containerd i
 make test-e2e
 ```
 
+### How the smoke tests work
+
+The smoke tests run the end-to-end tests every 15 minutes as a `CronJob` against the operator in production in a dedicated `job-request-operator-smoke-test` namespace. At the end of the run the suite pushes a `job_request_operator_smoke_test_success` metric to Prometheus which then sends a Slack alert to [#govuk-platform-support] if the tests fail.
+
 ### IDE Settings
 
 In order for `gopls` to pick up the `test/e2e` package ensure your IDE settings have `"-tags=e2e"` added. Add the following to VSCode's `settings.json`:
@@ -247,5 +251,6 @@ board](https://github.com/orgs/alphagov/projects/71).
 [MIT License](LICENCE)
 
 [#govuk-platform-engineering]: https://gds.slack.com/channels/govuk-platform-engineering
+[#govuk-platform-support]: https://gds.slack.com/channels/govuk-platform-support
 
 

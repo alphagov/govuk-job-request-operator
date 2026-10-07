@@ -6,7 +6,6 @@ metadata:
   namespace: job-request-operator-smoke-test
 spec:
   schedule: "*/15 * * * *"
-  suspend: true
   jobTemplate:
     spec:
       backoffLimit: 0
