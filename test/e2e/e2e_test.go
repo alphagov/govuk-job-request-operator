@@ -315,11 +315,17 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("Should add reviewed-by annotation to JobRequestReviews", func(ctx context.Context) {
+			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithoutAnnotation)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
+			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
 
@@ -337,11 +343,17 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("Should override a user set reviewed-by annotation on JobRequestReviews", func(ctx context.Context) {
+			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
+			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+
+			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithAnnotation)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
+			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
 
