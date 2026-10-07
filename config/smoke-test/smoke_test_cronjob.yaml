@@ -14,12 +14,15 @@ spec:
           serviceAccountName: {{ include "govuk-job-request-operator.resourceName" (dict "suffix" "smoke-test-runner" "context" $) }}
           automountServiceAccountToken: true
           restartPolicy: Never
+          backoffLimit: 0
           containers:
             - name: kubectl
               image: ghcr.io/alphagov/govuk/govuk-toolbox-image:v63
               env:
                 - name: CGO_ENABLED
                   value: "1"
+                - name: PROMETHEUS_PUSHGATEWAY_URL
+                  value: "http://prometheus-pushgateway.monitoring.svc.cluster.local:9091"
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities:
