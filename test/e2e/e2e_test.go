@@ -75,6 +75,36 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		controllerPodName string
 	)
 
+	BeforeAll(func(ctx context.Context) {
+		By("creating a govuk-replatform-test-app Deployment")
+		deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
+		Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
+
+		cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
+
+		By("waiting for the govuk-replatform-test-app deployment to become available.")
+		verifyDeploymentInAvailableState := func(g Gomega) {
+			cmd := exec.CommandContext(ctx, "kubectl", "get", "deployments", "govuk-replatform-test-app",
+				"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
+			output, err := utils.Run(cmd)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
+		}
+		Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
+	})
+
+	AfterAll(func(ctx context.Context) {
+		By("clean up Deployments")
+		cmd := exec.CommandContext(ctx, "kubectl", "delete", "deployment", "--all", "-n", appNamespace)
+		_, _ = utils.Run(cmd)
+
+		By("clean up Events")
+		cmd = exec.CommandContext(ctx, "kubectl", "delete", "events", "--all", "-n", appNamespace)
+		_, _ = utils.Run(cmd)
+	})
+
 	AfterEach(func(ctx context.Context) {
 		By("clean up JobReviews")
 		cmd := exec.CommandContext(ctx, "kubectl", "delete", "jrr", "--all", "-n", appNamespace)
@@ -82,10 +112,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 		By("clean up JobRequests")
 		cmd = exec.CommandContext(ctx, "kubectl", "delete", "jr", "--all", "-n", appNamespace)
-		_, _ = utils.Run(cmd)
-
-		By("clean up Deployments")
-		cmd = exec.CommandContext(ctx, "kubectl", "delete", "deployment", "--all", "-n", appNamespace)
 		_, _ = utils.Run(cmd)
 
 		By("clean up Events")
@@ -134,6 +160,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 	SetDefaultEventuallyTimeout(2 * time.Minute)
 	SetDefaultEventuallyPollingInterval(time.Second)
+	EnforceDefaultTimeoutsWhenUsingContexts()
 
 	Context("when checking manager health", func() {
 		It("should run successfully", func(ctx context.Context) {
@@ -254,207 +281,46 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	})
 
 	Context("MutatingAdmissionPolicy", func() {
-		BeforeEach(func(ctx context.Context) {
-			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
-
-			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
-
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
-
-			By("waiting for the govuk-replatform-test-app deployment to become available.")
-			verifyDeploymentInAvailableState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "deployments", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
-			}
-			Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
-		})
-
 		It("Should add requested-by annotation to JobRequests", func(ctx context.Context) {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithoutAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+			Expect(createJobRequest(ctx, jobRequestWithoutAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(jobRequestImpersonateUser))
-			}).Should(Succeed())
+			expectJobRequestToBeRequestedBy(ctx, "jr-govuk-replatform-test-app", jobRequestImpersonateUser)
 		})
 
 		It("Should override a user-specified requested-by annotation on JobRequests", func(ctx context.Context) {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(jobRequestImpersonateUser))
-			}).Should(Succeed())
+			expectJobRequestToBeRequestedBy(ctx, "jr-govuk-replatform-test-app", jobRequestImpersonateUser)
 		})
 
 		It("Should add reviewed-by annotation to JobRequestReviews", func(ctx context.Context) {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequestReview(ctx, jobRequestReviewWithoutAnnotation)).To(Succeed())
 
-			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithoutAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
-
-			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-					"jrr-jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
-					"-n", appNamespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(jobReviewImpersonateUser))
-			}).Should(Succeed())
+			expectJobRequestReviewToBeReviewedBy(ctx, "jrr-jr-govuk-replatform-test-app", jobReviewImpersonateUser)
 		})
 
 		It("Should override a user set reviewed-by annotation on JobRequestReviews", func(ctx context.Context) {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequestReview(ctx, jobRequestReviewWithAnnotation)).To(Succeed())
 
-			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
-
-			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-					"jrr-jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
-					"-n", appNamespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(jobReviewImpersonateUser))
-			}).Should(Succeed())
+			expectJobRequestReviewToBeReviewedBy(ctx, "jrr-jr-govuk-replatform-test-app", jobReviewImpersonateUser)
 		})
 	})
 
 	Context("when processing job requests", func() {
 		Context("and there is another unreviewed JobRequest created before ours", func() {
-			BeforeEach(func(ctx context.Context) {
-				By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
-				deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
-
-				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
-
-				By("waiting for the govuk-replatform-test-app deployment to become available.")
-				verifyDeploymentInAvailableState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "deployments", "govuk-replatform-test-app",
-						"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
-				}
-				Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
-			})
-
 			It("should set the correct JobRequest to Rejected if a JobRequestReview is created to reject it", func(ctx context.Context) {
-				By("creating a JobRequest")
-				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
+				Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
-				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
+				Expect(createJobRequest(ctx, jobRequestForSecondJob)).To(Succeed(), "Failed to create second JobRequest")
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Pending")
 
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
-
-				By("creating a second JobRequest")
-				jobRequestFixture, err = utils.RetrieveFixtureFilePath(jobRequestForSecondJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app-2 jobRequest")
-
-				verifySecondJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifySecondJobRequestInPendingState, 20*time.Second, time.Second).Should(Succeed())
-
-				By("creating a JobRequestReview to reject the second JobRequest")
-				jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejectedForSecondJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app-2 jobRequestReviewRejected")
-
-				By("verifying the JobRequestReview is Rejected")
-				verifyJobRequestReviewInRejectedState := func(g Gomega) {
-					cmd = exec.CommandContext(ctx,
-						"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-						"jrr-jr-govuk-replatform-test-app-2",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace,
-					)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Rejected"), "JobRequestReview in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestReviewInRejectedState, 20*time.Second, time.Second).Should(Succeed())
+				Expect(createJobRequestReview(ctx, jobRequestReviewRejectedForSecondJob)).To(Succeed())
+				expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app-2", "Rejected")
 
 				By("verifying the other JobRequestReview is still Pending")
 				verifyOtherJobRequestStillInPendingState := func(g Gomega) {
@@ -467,285 +333,55 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				}
 				Consistently(ctx, verifyOtherJobRequestStillInPendingState, 5*time.Second, time.Second).Should(Succeed())
 
-				By("verifying the correct JobRequest is now Rejected")
-				verifyJobRequestInRejectedState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Rejected"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestInRejectedState, 20*time.Second, time.Second).Should(Succeed())
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Rejected")
 			})
 		})
 
 		Context("and there is another already reviewed JobRequest, and our JobRequest is not yet reviewed", func() {
 			BeforeEach(func(ctx context.Context) {
-				By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
-				deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
+				Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
-				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
-
-				By("waiting for the govuk-replatform-test-app deployment to become available.")
-				verifyDeploymentInAvailableState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "deployments", "govuk-replatform-test-app",
-						"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
-				}
-				Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
-
-				By("creating a JobRequest")
-				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
-
-				By("creating a JobRequestReview to approve the JobRequest")
-				jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
-
-				verifyJobRequestReviewInApprovedState := func(g Gomega) {
-					cmd = exec.CommandContext(ctx,
-						"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-						"jrr-jr-govuk-replatform-test-app",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace,
-					)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
-				}
-
-				Eventually(ctx, verifyJobRequestReviewInApprovedState).Should(Succeed())
+				Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
+				expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Approved")
 			})
 
 			It("should set the JobRequest to pending", func(ctx context.Context) {
-				By("creating a JobRequest")
-				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSecondJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app-2 jobRequest")
-
-				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestInPendingState, 20*time.Second, time.Second).Should(Succeed())
+				Expect(createJobRequest(ctx, jobRequestForSecondJob)).To(Succeed(), "Failed to create JobRequest")
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Pending")
 			})
 		})
 
 		It("should create and successfully complete a job that is approved", func(ctx context.Context) {
-			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
+			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
-			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
+			Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
 
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
+			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Approved")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Approved")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Approved")
 
-			By("waiting for the govuk-replatform-test-app deployment to become available.")
-			verifyDeploymentInAvailableState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "deployments", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
-			}
-			Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
-
-			By("creating a JobRequest")
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace,
-					"--as", jobRequestImpersonateUser)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-			}
-
-			verifyJobRequestPendingEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Pending",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
-			}
-
-			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
-			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
-
-			By("creating a JobRequestReview to approve the JobRequest")
-			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
-
-			By("JobRequestReview is in Approved state")
-			verifyJobRequestReviewInApprovedState := func(g Gomega) {
-				cmd = exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-					"jrr-jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace,
-					"--as", jobReviewImpersonateUser,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
-			}
-
-			verifyJobRequestReviewApprovedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequestReview,reason=Approved",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
-			}
-
-			verifyJobRequestApprovedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Approved",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
-			}
-
-			Eventually(ctx, verifyJobRequestReviewInApprovedState).Should(Succeed())
-			Eventually(ctx, verifyJobRequestReviewApprovedEventEmitted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestApprovedEventEmitted).Should(Succeed())
-
-			By("JobRequest is in Started state")
-			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"jobName":"jr-govuk-replatform-test-app","reviewName":"jrr-jr-govuk-replatform-test-app","state":"Started"}`
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status}",
-					"-n", appNamespace,
-					"--as", jobReviewImpersonateUser)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).Should(MatchJSON(jobRequestStateJSON))
-			}
-
-			verifyJobRequestStartedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Started",
-					"-o", "json",
-					"-n", appNamespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Started"))
-			}
-
-			Eventually(ctx, verifyJobRequestStarted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestStartedEventEmitted).Should(Succeed())
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Started")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Started")
 
 			By("Job successfully performs rake task")
 			verifyJobCompleted := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.succeeded}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("1"), "Job not succeeded")
 			}
-			verifyJobRequestCompleteEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Complete",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Complete"))
-			}
 
 			Eventually(ctx, verifyJobCompleted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestCompleteEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Complete")
 
 			verifyJobOutput := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "logs", "jobs/jr-govuk-replatform-test-app", "-n", appNamespace)
+				cmd := exec.CommandContext(ctx, "kubectl", "logs", "jobs/jr-govuk-replatform-test-app", "-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(ContainSubstring("Hello World!"))
@@ -755,309 +391,49 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("should create and successfully report a failed job that is approved", func(ctx context.Context) {
-			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
+			Expect(createJobRequest(ctx, jobRequestForFailedJob)).To(Succeed(), "Failed to create JobRequest")
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
-			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
+			Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
+			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Approved")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Approved")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Approved")
 
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
-
-			By("waiting for the govuk-replatform-test-app deployment to become available.")
-			verifyDeploymentInAvailableState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "deployments", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
-			}
-			Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
-
-			By("creating a JobRequest")
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForFailedJob)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-			}
-
-			verifyJobRequestPendingEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Pending",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
-			}
-
-			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
-			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
-
-			By("creating a JobRequestReview to approve the JobRequest")
-			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
-
-			By("JobRequestReview is in Approved state")
-			verifyJobRequestReviewInApprovedState := func(g Gomega) {
-				cmd = exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-					"jrr-jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Approved"), "JobRequestReview in wrong status")
-			}
-
-			verifyJobRequestReviewApprovedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequestReview,reason=Approved",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
-			}
-
-			verifyJobRequestApprovedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Approved",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
-			}
-
-			Eventually(ctx, verifyJobRequestReviewInApprovedState).Should(Succeed())
-			Eventually(ctx, verifyJobRequestReviewApprovedEventEmitted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestApprovedEventEmitted).Should(Succeed())
-
-			By("JobRequest is in Started state")
-			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"jobName":"jr-govuk-replatform-test-app","reviewName":"jrr-jr-govuk-replatform-test-app","state":"Started"}`
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).Should(MatchJSON(jobRequestStateJSON))
-			}
-
-			verifyJobRequestStartedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Started",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Started"))
-			}
-
-			Eventually(ctx, verifyJobRequestStarted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestStartedEventEmitted).Should(Succeed())
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Started")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Started")
 
 			By("Job fails to perform rake task")
 			verifyJobFailed := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app",
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app",
 					"-o", "jsonpath={.status.failed}",
 					"-n", appNamespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("1"), "Job not failed")
 			}
-			verifyJobRequestFailedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Failed",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Failed"))
-			}
 
 			Eventually(ctx, verifyJobFailed).Should(Succeed())
-			Eventually(ctx, verifyJobRequestFailedEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Failed")
 		})
 
 		It("should not create a job when JobRequest is rejected", func(ctx context.Context) {
-			By("creating a govuk-replatform-test-app Deployment for the JobRequest to run a rake task from")
-			deploymentFixture, err := utils.RetrieveFixtureFilePath(govukReplatformTestAppDeployment)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve deployment fixture filepath")
+			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
 
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", deploymentFixture, "-n", appNamespace)
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app deployment")
+			Expect(createJobRequestReview(ctx, jobRequestReviewRejected)).To(Succeed())
+			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Rejected")
 
-			By("waiting for the govuk-replatform-test-app deployment to become available.")
-			verifyDeploymentInAvailableState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "deployments", "govuk-replatform-test-app",
-					"-o", "jsonpath={.status.conditions[?(@.type=='Available')].status}", "-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"), "govuk-replatform-test-app deployment not ready")
-			}
-			Eventually(ctx, verifyDeploymentInAvailableState).Should(Succeed())
-
-			By("creating a JobRequest")
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
-
-			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequests.platform.publishing.service.gov.uk",
-					"jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-			}
-			verifyJobRequestPendingEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Pending",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
-			}
-			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
-			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
-
-			By("creating a JobRequestReview to reject the JobRequest")
-			jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejected)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
-
-			verifyJobRequestReviewInRejectedState := func(g Gomega) {
-				cmd = exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-					"jrr-jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Rejected"), "JobRequestReview in wrong status")
-			}
-
-			verifyJobRequestReviewRejectedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequestReview,reason=Rejected",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Rejected"))
-			}
-
-			verifyJobRequestRejectedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Rejected",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Rejected"))
-			}
-			Eventually(ctx, verifyJobRequestReviewInRejectedState).Should(Succeed())
-			Eventually(ctx, verifyJobRequestReviewRejectedEventEmitted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestRejectedEventEmitted).Should(Succeed())
-
-			By("JobRequest is in Rejected state")
-			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"reviewName":"jrr-jr-govuk-replatform-test-app","state":"Rejected"}`
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).Should(MatchJSON(jobRequestStateJSON), "JobRequest in wrong status")
-			}
-
-			Eventually(ctx, verifyJobRequestStarted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Rejected")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Rejected")
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Rejected")
 
 			By("Job not created")
 			verifyJobNotStarted := func(g Gomega) {
-				cmd = exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app", "-n", appNamespace)
+				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobs", "jr-govuk-replatform-test-app", "-n", appNamespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred())
 			}
@@ -1074,4 +450,105 @@ func getMetricsOutput(ctx context.Context, controllerNamespace string) (string, 
 	By("getting the curl-metrics logs")
 	cmd := exec.CommandContext(ctx, "kubectl", "logs", "curl-metrics", "-n", controllerNamespace)
 	return utils.Run(cmd)
+}
+
+func createJobRequest(ctx context.Context, jobRequestFixutrePath string) error {
+	By(fmt.Sprintf("creating a JobRequest from fixture %s", jobRequestFixutrePath))
+	jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestFixutrePath)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
+	_, err = utils.Run(cmd)
+
+	return err
+}
+
+func createJobRequestReview(ctx context.Context, jobRequestReviewFixturePath string) error {
+	By(fmt.Sprintf("creating a JobRequestReview form fixture %s", jobRequestReviewFixturePath))
+	jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewFixturePath)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+	_, err = utils.Run(cmd)
+
+	return err
+}
+
+func expectJobRequestToBeRequestedBy(ctx context.Context, jobRequestName, userArn string) {
+	By(fmt.Sprintf("expecting JobRequest %s to have been requested by %s", jobRequestName, userArn))
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", jobRequestName,
+			"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
+			"-n", appNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(Equal(userArn))
+	}).WithOffset(1).Should(Succeed())
+}
+
+func expectJobRequestReviewToBeReviewedBy(ctx context.Context, jobRequestReviewName, userArn string) {
+	By(fmt.Sprintf("expecting JobRequestReview %s have been created by %s", jobRequestReviewName, userArn))
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx,
+			"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+			jobRequestReviewName,
+			"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
+			"-n", appNamespace,
+		)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(Equal(userArn))
+	}).WithOffset(1).Should(Succeed())
+}
+
+func expectJobRequestToBeInState(ctx context.Context, jobRequestName, state string) {
+	By(fmt.Sprintf("expecting JobRequest %s is in state %s", jobRequestName, state))
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx,
+			"kubectl", "get", "jobrequests.platform.publishing.service.gov.uk",
+			jobRequestName,
+			"-o", "jsonpath={.status.state}",
+			"-n", appNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(Equal(state), "JobRequest in wrong status")
+	}).WithOffset(1).Should(Succeed())
+}
+
+func expectJobRequestReviewToBeInState(ctx context.Context, jobRequestReviewName, state string) {
+	By(fmt.Sprintf("expecting JobRequestReview %s is in state %s", jobRequestReviewName, state))
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx,
+			"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+			jobRequestReviewName,
+			"-o", "jsonpath={.status.state}",
+			"-n", appNamespace,
+		)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(Equal(state), "JobRequestReview in wrong status")
+	}).WithOffset(1).Should(Succeed())
+}
+
+func expectResourceToHaveEventEmittedForState(ctx context.Context, resource, state string) {
+	By(fmt.Sprintf("expecting a %s emitted an event saying it was transitioning to state %s", resource, state))
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
+			fmt.Sprintf("involvedObject.kind=%s,reason=%s", resource, state),
+			"-o", "json",
+			"-n", appNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		eventList := &eventsv1.EventList{}
+		err = json.Unmarshal([]byte(output), &eventList)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Expect(eventList.Items).To(HaveLen(1))
+		g.Expect(eventList.Items[0].Reason).To(Equal(state))
+	}).WithOffset(1).Should(Succeed())
 }
