@@ -479,6 +479,7 @@ func createJobRequestReview(ctx context.Context, jobRequestReviewFixturePath str
 }
 
 func expectJobRequestToBeRequestedBy(ctx context.Context, jobRequestName, userArn string) {
+	By(fmt.Sprintf("expecting JobRequest %s to have been requested by %s", jobRequestName, userArn))
 	Eventually(ctx, func(g Gomega) {
 		cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", jobRequestName,
 			"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
@@ -490,6 +491,7 @@ func expectJobRequestToBeRequestedBy(ctx context.Context, jobRequestName, userAr
 }
 
 func expectJobRequestReviewToBeReviewedBy(ctx context.Context, jobRequestReviewName, userArn string) {
+	By(fmt.Sprintf("expecting JobRequestReview %s have been created by %s", jobRequestReviewName, userArn))
 	Eventually(ctx, func(g Gomega) {
 		cmd := exec.CommandContext(ctx,
 			"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
@@ -504,6 +506,7 @@ func expectJobRequestReviewToBeReviewedBy(ctx context.Context, jobRequestReviewN
 }
 
 func expectJobRequestToBeInState(ctx context.Context, jobRequestName, state string) {
+	By(fmt.Sprintf("expecting JobRequest %s is in state %s", jobRequestName, state))
 	Eventually(ctx, func(g Gomega) {
 		cmd := exec.CommandContext(ctx,
 			"kubectl", "get", "jobrequests.platform.publishing.service.gov.uk",
@@ -517,6 +520,7 @@ func expectJobRequestToBeInState(ctx context.Context, jobRequestName, state stri
 }
 
 func expectJobRequestReviewToBeInState(ctx context.Context, jobRequestReviewName, state string) {
+	By(fmt.Sprintf("expecting JobRequestReview %s is in state %s", jobRequestReviewName, state))
 	Eventually(ctx, func(g Gomega) {
 		cmd := exec.CommandContext(ctx,
 			"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
@@ -531,6 +535,7 @@ func expectJobRequestReviewToBeInState(ctx context.Context, jobRequestReviewName
 }
 
 func expectResourceToHaveEventEmittedForState(ctx context.Context, resource, state string) {
+	By(fmt.Sprintf("expecting a %s emitted an event saying it was transitioning to state %s", resource, state))
 	Eventually(ctx, func(g Gomega) {
 		cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
 			fmt.Sprintf("involvedObject.kind=%s,reason=%s", resource, state),
