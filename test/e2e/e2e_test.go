@@ -284,27 +284,13 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		It("Should add requested-by annotation to JobRequests", func(ctx context.Context) {
 			Expect(createJobRequest(ctx, jobRequestWithoutAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
-			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(jobRequestImpersonateUser))
-			}).Should(Succeed())
+			expectJobRequestToBeRequestedBy(ctx, "jr-govuk-replatform-test-app", jobRequestImpersonateUser)
 		})
 
 		It("Should override a user-specified requested-by annotation on JobRequests", func(ctx context.Context) {
 			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
-			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(jobRequestImpersonateUser))
-			}).Should(Succeed())
+			expectJobRequestToBeRequestedBy(ctx, "jr-govuk-replatform-test-app", jobRequestImpersonateUser)
 		})
 
 		It("Should add reviewed-by annotation to JobRequestReviews", func(ctx context.Context) {
@@ -317,17 +303,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
 
-			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-					"jrr-jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
-					"-n", appNamespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(jobReviewImpersonateUser))
-			}).Should(Succeed())
+			expectJobRequestReviewToBeReviewedBy(ctx, "jrr-jr-govuk-replatform-test-app", jobReviewImpersonateUser)
 		})
 
 		It("Should override a user set reviewed-by annotation on JobRequestReviews", func(ctx context.Context) {
@@ -340,17 +316,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
 
-			Eventually(ctx, func(g Gomega) {
-				cmd := exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
-					"jrr-jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
-					"-n", appNamespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal(jobReviewImpersonateUser))
-			}).Should(Succeed())
+			expectJobRequestReviewToBeReviewedBy(ctx, "jrr-jr-govuk-replatform-test-app", jobReviewImpersonateUser)
 		})
 	})
 
@@ -922,4 +888,29 @@ func createJobRequest(ctx context.Context, jobRequestFixutre string) error {
 	_, err = utils.Run(cmd)
 
 	return err
+}
+
+func expectJobRequestToBeRequestedBy(ctx context.Context, jobRequestName, userArn string) {
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", jobRequestName,
+			"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/requested\\-by}",
+			"-n", appNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(Equal(userArn))
+	}).Should(Succeed())
+}
+
+func expectJobRequestReviewToBeReviewedBy(ctx context.Context, jobRequestReviewName, userArn string) {
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx,
+			"kubectl", "get", "jobrequestreviews.platform.publishing.service.gov.uk",
+			jobRequestReviewName,
+			"-o", "jsonpath={.metadata.annotations.platform\\.publishing\\.service\\.gov\\.uk/reviewed\\-by}",
+			"-n", appNamespace,
+		)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(Equal(userArn))
+	}).Should(Succeed())
 }
