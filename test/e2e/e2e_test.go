@@ -158,8 +158,9 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		}
 	})
 
-	SetDefaultEventuallyTimeout(2 * time.Minute)
+	SetDefaultEventuallyTimeout(eventuallyTimeout)
 	SetDefaultEventuallyPollingInterval(time.Second)
+	EnforceDefaultTimeoutsWhenUsingContexts()
 
 	Context("when checking manager health", func() {
 		It("should run successfully", func(ctx context.Context) {
