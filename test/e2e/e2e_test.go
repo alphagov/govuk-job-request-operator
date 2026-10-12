@@ -158,7 +158,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		}
 	})
 
-	SetDefaultEventuallyTimeout(eventuallyTimeout)
+	SetDefaultEventuallyTimeout(2 * time.Minute)
 	SetDefaultEventuallyPollingInterval(time.Second)
 	EnforceDefaultTimeoutsWhenUsingContexts()
 
@@ -282,13 +282,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 	Context("MutatingAdmissionPolicy", func() {
 		It("Should add requested-by annotation to JobRequests", func(ctx context.Context) {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithoutAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequest(ctx, jobRequestWithoutAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
 			Eventually(ctx, func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
@@ -301,13 +295,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("Should override a user-specified requested-by annotation on JobRequests", func(ctx context.Context) {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
 			Eventually(ctx, func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
@@ -320,17 +308,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("Should add reviewed-by annotation to JobRequestReviews", func(ctx context.Context) {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithoutAnnotation)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
 
@@ -348,17 +331,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("Should override a user set reviewed-by annotation on JobRequestReviews", func(ctx context.Context) {
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestWithAnnotation)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
 
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewWithAnnotation)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReview")
 
@@ -379,14 +357,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	Context("when processing job requests", func() {
 		Context("and there is another unreviewed JobRequest created before ours", func() {
 			It("should set the correct JobRequest to Rejected if a JobRequestReview is created to reject it", func(ctx context.Context) {
-				By("creating a JobRequest")
-				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+				Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
 
 				verifyJobRequestInPendingState := func(g Gomega) {
 					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
@@ -398,14 +369,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				}
 				Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
 
-				By("creating a second JobRequest")
-				jobRequestFixture, err = utils.RetrieveFixtureFilePath(jobRequestForSecondJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app-2 jobRequest")
+				Expect(createJobRequest(ctx, jobRequestForSecondJob)).To(Succeed(), "Failed to create second JobRequest")
 
 				verifySecondJobRequestInPendingState := func(g Gomega) {
 					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
@@ -421,7 +385,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejectedForSecondJob)
 				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-				cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 
 				_, err = utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app-2 jobRequestReviewRejected")
@@ -466,14 +430,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 		Context("and there is another already reviewed JobRequest, and our JobRequest is not yet reviewed", func() {
 			BeforeEach(func(ctx context.Context) {
-				By("creating a JobRequest")
-				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+				Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
 
 				verifyJobRequestInPendingState := func(g Gomega) {
 					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
@@ -489,7 +446,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
 				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-				cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 
 				_, err = utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
@@ -510,14 +467,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			})
 
 			It("should set the JobRequest to pending", func(ctx context.Context) {
-				By("creating a JobRequest")
-				jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSecondJob)
-				Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-				cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-
-				_, err = utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app-2 jobRequest")
+				Expect(createJobRequest(ctx, jobRequestForSecondJob)).To(Succeed(), "Failed to create JobRequest")
 
 				verifyJobRequestInPendingState := func(g Gomega) {
 					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
@@ -532,14 +482,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("should create and successfully complete a job that is approved", func(ctx context.Context) {
-			By("creating a JobRequest")
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
 
 			verifyJobRequestInPendingState := func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
@@ -574,7 +517,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
@@ -700,14 +643,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("should create and successfully report a failed job that is approved", func(ctx context.Context) {
-			By("creating a JobRequest")
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForFailedJob)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequest(ctx, jobRequestForFailedJob)).To(Succeed(), "Failed to create JobRequest")
 
 			verifyJobRequestInPendingState := func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
@@ -741,7 +677,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewApproved)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
@@ -855,14 +791,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("should not create a job when JobRequest is rejected", func(ctx context.Context) {
-			By("creating a JobRequest")
-			jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestForSuccessfulJob)
-			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
-
-			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-
-			_, err = utils.Run(cmd)
-			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequest")
+			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
 
 			verifyJobRequestInPendingState := func(g Gomega) {
 				cmd := exec.CommandContext(ctx,
@@ -896,7 +825,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			jobRequestReviewRejectedFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewRejected)
 			Expect(err).NotTo(HaveOccurred(), "Failed to retrieve current working directory")
 
-			cmd = exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+			cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewRejectedFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
 
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create govuk-replatform-test-app jobRequestReviewApproved")
@@ -980,4 +909,17 @@ func getMetricsOutput(ctx context.Context, controllerNamespace string) (string, 
 	By("getting the curl-metrics logs")
 	cmd := exec.CommandContext(ctx, "kubectl", "logs", "curl-metrics", "-n", controllerNamespace)
 	return utils.Run(cmd)
+}
+
+func createJobRequest(ctx context.Context, jobRequestFixutre string) error {
+	By(fmt.Sprintf("creating a JobRequest from fixture %s", jobRequestFixutre))
+	jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestFixutre)
+	if err != nil {
+		return err
+	}
+
+	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
+	_, err = utils.Run(cmd)
+
+	return err
 }
