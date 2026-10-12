@@ -314,28 +314,10 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		Context("and there is another unreviewed JobRequest created before ours", func() {
 			It("should set the correct JobRequest to Rejected if a JobRequestReview is created to reject it", func(ctx context.Context) {
 				Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
-
-				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
 				Expect(createJobRequest(ctx, jobRequestForSecondJob)).To(Succeed(), "Failed to create second JobRequest")
-
-				verifySecondJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifySecondJobRequestInPendingState, 20*time.Second, time.Second).Should(Succeed())
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Pending")
 
 				Expect(createJobRequestReview(ctx, jobRequestReviewRejectedForSecondJob)).To(Succeed())
 
@@ -364,32 +346,14 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				}
 				Consistently(ctx, verifyOtherJobRequestStillInPendingState, 5*time.Second, time.Second).Should(Succeed())
 
-				By("verifying the correct JobRequest is now Rejected")
-				verifyJobRequestInRejectedState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Rejected"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestInRejectedState, 20*time.Second, time.Second).Should(Succeed())
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Rejected")
 			})
 		})
 
 		Context("and there is another already reviewed JobRequest, and our JobRequest is not yet reviewed", func() {
 			BeforeEach(func(ctx context.Context) {
 				Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
-
-				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
 				Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
 
@@ -411,30 +375,13 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			It("should set the JobRequest to pending", func(ctx context.Context) {
 				Expect(createJobRequest(ctx, jobRequestForSecondJob)).To(Succeed(), "Failed to create JobRequest")
 
-				verifyJobRequestInPendingState := func(g Gomega) {
-					cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app-2",
-						"-o", "jsonpath={.status.state}",
-						"-n", appNamespace)
-					output, err := utils.Run(cmd)
-					g.Expect(err).NotTo(HaveOccurred())
-					g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-				}
-				Eventually(ctx, verifyJobRequestInPendingState, 20*time.Second, time.Second).Should(Succeed())
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Pending")
 			})
 		})
 
 		It("should create and successfully complete a job that is approved", func(ctx context.Context) {
 			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
-
-			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace,
-					"--as", jobRequestImpersonateUser)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-			}
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
 			verifyJobRequestPendingEventEmitted := func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
@@ -452,7 +399,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
 			}
 
-			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
 			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
 
 			Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
@@ -507,17 +453,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Eventually(ctx, verifyJobRequestReviewApprovedEventEmitted).Should(Succeed())
 			Eventually(ctx, verifyJobRequestApprovedEventEmitted).Should(Succeed())
 
-			By("JobRequest is in Started state")
-			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"jobName":"jr-govuk-replatform-test-app","reviewName":"jrr-jr-govuk-replatform-test-app","state":"Started"}`
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status}",
-					"-n", appNamespace,
-					"--as", jobReviewImpersonateUser)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).Should(MatchJSON(jobRequestStateJSON))
-			}
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Started")
 
 			verifyJobRequestStartedEventEmitted := func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
@@ -535,8 +471,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal("Started"))
 			}
-
-			Eventually(ctx, verifyJobRequestStarted).Should(Succeed())
 			Eventually(ctx, verifyJobRequestStartedEventEmitted).Should(Succeed())
 
 			By("Job successfully performs rake task")
@@ -579,15 +513,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 		It("should create and successfully report a failed job that is approved", func(ctx context.Context) {
 			Expect(createJobRequest(ctx, jobRequestForFailedJob)).To(Succeed(), "Failed to create JobRequest")
-
-			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-			}
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
 			verifyJobRequestPendingEventEmitted := func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
@@ -604,8 +530,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
 			}
-
-			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
 			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
 
 			Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
@@ -659,16 +583,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Eventually(ctx, verifyJobRequestReviewApprovedEventEmitted).Should(Succeed())
 			Eventually(ctx, verifyJobRequestApprovedEventEmitted).Should(Succeed())
 
-			By("JobRequest is in Started state")
-			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"jobName":"jr-govuk-replatform-test-app","reviewName":"jrr-jr-govuk-replatform-test-app","state":"Started"}`
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).Should(MatchJSON(jobRequestStateJSON))
-			}
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Started")
 
 			verifyJobRequestStartedEventEmitted := func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
@@ -685,8 +600,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal("Started"))
 			}
-
-			Eventually(ctx, verifyJobRequestStarted).Should(Succeed())
 			Eventually(ctx, verifyJobRequestStartedEventEmitted).Should(Succeed())
 
 			By("Job fails to perform rake task")
@@ -721,16 +634,8 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		It("should not create a job when JobRequest is rejected", func(ctx context.Context) {
 			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
 
-			verifyJobRequestInPendingState := func(g Gomega) {
-				cmd := exec.CommandContext(ctx,
-					"kubectl", "get", "jobrequests.platform.publishing.service.gov.uk",
-					"jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status.state}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("Pending"), "JobRequest in wrong status")
-			}
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
+
 			verifyJobRequestPendingEventEmitted := func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
 					"involvedObject.kind=JobRequest,reason=Pending",
@@ -746,7 +651,6 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				g.Expect(eventList.Items).To(HaveLen(1))
 				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
 			}
-			Eventually(ctx, verifyJobRequestInPendingState).Should(Succeed())
 			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
 
 			Expect(createJobRequestReview(ctx, jobRequestReviewRejected)).To(Succeed())
@@ -798,18 +702,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Eventually(ctx, verifyJobRequestReviewRejectedEventEmitted).Should(Succeed())
 			Eventually(ctx, verifyJobRequestRejectedEventEmitted).Should(Succeed())
 
-			By("JobRequest is in Rejected state")
-			verifyJobRequestStarted := func(g Gomega) {
-				jobRequestStateJSON := `{"reviewName":"jrr-jr-govuk-replatform-test-app","state":"Rejected"}`
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "jobrequests.platform.publishing.service.gov.uk", "jr-govuk-replatform-test-app",
-					"-o", "jsonpath={.status}",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).Should(MatchJSON(jobRequestStateJSON), "JobRequest in wrong status")
-			}
-
-			Eventually(ctx, verifyJobRequestStarted).Should(Succeed())
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Rejected")
 
 			By("Job not created")
 			verifyJobNotStarted := func(g Gomega) {
@@ -866,7 +759,7 @@ func expectJobRequestToBeRequestedBy(ctx context.Context, jobRequestName, userAr
 		output, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(output).To(Equal(userArn))
-	}).Should(Succeed())
+	}).WithOffset(1).Should(Succeed())
 }
 
 func expectJobRequestReviewToBeReviewedBy(ctx context.Context, jobRequestReviewName, userArn string) {
@@ -880,5 +773,18 @@ func expectJobRequestReviewToBeReviewedBy(ctx context.Context, jobRequestReviewN
 		output, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(output).To(Equal(userArn))
-	}).Should(Succeed())
+	}).WithOffset(1).Should(Succeed())
+}
+
+func expectJobRequestToBeInState(ctx context.Context, jobRequestName, state string) {
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx,
+			"kubectl", "get", "jobrequests.platform.publishing.service.gov.uk",
+			jobRequestName,
+			"-o", "jsonpath={.status.state}",
+			"-n", appNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(output).To(Equal(state), "JobRequest in wrong status")
+	}).WithOffset(1).Should(Succeed())
 }
