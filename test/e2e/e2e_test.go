@@ -356,81 +356,16 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
-			verifyJobRequestPendingEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Pending",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
-			}
-
-			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
 			Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
+
 			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Approved")
-
-			verifyJobRequestReviewApprovedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequestReview,reason=Approved",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
-			}
-
-			verifyJobRequestApprovedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Approved",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
-			}
-
-			Eventually(ctx, verifyJobRequestReviewApprovedEventEmitted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestApprovedEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Approved")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Approved")
 
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Started")
-
-			verifyJobRequestStartedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Started",
-					"-o", "json",
-					"-n", appNamespace,
-				)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Started"))
-			}
-			Eventually(ctx, verifyJobRequestStartedEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Started")
 
 			By("Job successfully performs rake task")
 			verifyJobCompleted := func(g Gomega) {
@@ -441,24 +376,9 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("1"), "Job not succeeded")
 			}
-			verifyJobRequestCompleteEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Complete",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Complete"))
-			}
 
 			Eventually(ctx, verifyJobCompleted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestCompleteEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Complete")
 
 			verifyJobOutput := func(g Gomega) {
 				cmd := exec.CommandContext(ctx, "kubectl", "logs", "jobs/jr-govuk-replatform-test-app", "-n", appNamespace)
@@ -473,80 +393,16 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		It("should create and successfully report a failed job that is approved", func(ctx context.Context) {
 			Expect(createJobRequest(ctx, jobRequestForFailedJob)).To(Succeed(), "Failed to create JobRequest")
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
-
-			verifyJobRequestPendingEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Pending",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
-			}
-			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
 			Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
 			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Approved")
 
-			verifyJobRequestReviewApprovedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequestReview,reason=Approved",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
-			}
-
-			verifyJobRequestApprovedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Approved",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Approved"))
-			}
-
-			Eventually(ctx, verifyJobRequestReviewApprovedEventEmitted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestApprovedEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Approved")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Approved")
 
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Started")
-
-			verifyJobRequestStartedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Started",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Started"))
-			}
-			Eventually(ctx, verifyJobRequestStartedEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Started")
 
 			By("Job fails to perform rake task")
 			verifyJobFailed := func(g Gomega) {
@@ -557,85 +413,22 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(output).To(Equal("1"), "Job not failed")
 			}
-			verifyJobRequestFailedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Failed",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Failed"))
-			}
 
 			Eventually(ctx, verifyJobFailed).Should(Succeed())
-			Eventually(ctx, verifyJobRequestFailedEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Failed")
 		})
 
 		It("should not create a job when JobRequest is rejected", func(ctx context.Context) {
 			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
 
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
-
-			verifyJobRequestPendingEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Pending",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Pending"))
-			}
-			Eventually(ctx, verifyJobRequestPendingEventEmitted).Should(Succeed())
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
 			Expect(createJobRequestReview(ctx, jobRequestReviewRejected)).To(Succeed())
 			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Rejected")
 
-			verifyJobRequestReviewRejectedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequestReview,reason=Rejected",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Rejected"))
-			}
-
-			verifyJobRequestRejectedEventEmitted := func(g Gomega) {
-				cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
-					"involvedObject.kind=JobRequest,reason=Rejected",
-					"-o", "json",
-					"-n", appNamespace)
-				output, err := utils.Run(cmd)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				eventList := &eventsv1.EventList{}
-				err = json.Unmarshal([]byte(output), &eventList)
-				g.Expect(err).NotTo(HaveOccurred())
-
-				g.Expect(eventList.Items).To(HaveLen(1))
-				g.Expect(eventList.Items[0].Reason).To(Equal("Rejected"))
-			}
-			Eventually(ctx, verifyJobRequestReviewRejectedEventEmitted).Should(Succeed())
-			Eventually(ctx, verifyJobRequestRejectedEventEmitted).Should(Succeed())
-
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Rejected")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Rejected")
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Rejected")
 
 			By("Job not created")
@@ -734,5 +527,23 @@ func expectJobRequestReviewToBeInState(ctx context.Context, jobRequestReviewName
 		output, err := utils.Run(cmd)
 		g.Expect(err).NotTo(HaveOccurred())
 		g.Expect(output).To(Equal(state), "JobRequestReview in wrong status")
+	}).WithOffset(1).Should(Succeed())
+}
+
+func expectResourceToHaveEventEmittedForState(ctx context.Context, resource, state string) {
+	Eventually(ctx, func(g Gomega) {
+		cmd := exec.CommandContext(ctx, "kubectl", "get", "events", "--field-selector",
+			fmt.Sprintf("involvedObject.kind=%s,reason=%s", resource, state),
+			"-o", "json",
+			"-n", appNamespace)
+		output, err := utils.Run(cmd)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		eventList := &eventsv1.EventList{}
+		err = json.Unmarshal([]byte(output), &eventList)
+		g.Expect(err).NotTo(HaveOccurred())
+
+		g.Expect(eventList.Items).To(HaveLen(1))
+		g.Expect(eventList.Items[0].Reason).To(Equal(state))
 	}).WithOffset(1).Should(Succeed())
 }
