@@ -282,29 +282,29 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 	Context("MutatingAdmissionPolicy", func() {
 		It("Should add requested-by annotation to JobRequests", func(ctx context.Context) {
-			Expect(createJobRequest(ctx, jobRequestWithoutAnnotation)).To(Succeed(), "Failed to create JobRequest")
+			createJobRequest(ctx, jobRequestWithoutAnnotation)
 
 			expectJobRequestToBeRequestedBy(ctx, "jr-govuk-replatform-test-app", jobRequestImpersonateUser)
 		})
 
 		It("Should override a user-specified requested-by annotation on JobRequests", func(ctx context.Context) {
-			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
+			createJobRequest(ctx, jobRequestWithAnnotation)
 
 			expectJobRequestToBeRequestedBy(ctx, "jr-govuk-replatform-test-app", jobRequestImpersonateUser)
 		})
 
 		It("Should add reviewed-by annotation to JobRequestReviews", func(ctx context.Context) {
-			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
+			createJobRequest(ctx, jobRequestWithAnnotation)
 
-			Expect(createJobRequestReview(ctx, jobRequestReviewWithoutAnnotation)).To(Succeed())
+			createJobRequestReview(ctx, jobRequestReviewWithoutAnnotation)
 
 			expectJobRequestReviewToBeReviewedBy(ctx, "jrr-jr-govuk-replatform-test-app", jobReviewImpersonateUser)
 		})
 
 		It("Should override a user set reviewed-by annotation on JobRequestReviews", func(ctx context.Context) {
-			Expect(createJobRequest(ctx, jobRequestWithAnnotation)).To(Succeed(), "Failed to create JobRequest")
+			createJobRequest(ctx, jobRequestWithAnnotation)
 
-			Expect(createJobRequestReview(ctx, jobRequestReviewWithAnnotation)).To(Succeed())
+			createJobRequestReview(ctx, jobRequestReviewWithAnnotation)
 
 			expectJobRequestReviewToBeReviewedBy(ctx, "jrr-jr-govuk-replatform-test-app", jobReviewImpersonateUser)
 		})
@@ -313,13 +313,13 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 	Context("when processing job requests", func() {
 		Context("and there is another unreviewed JobRequest created before ours", func() {
 			It("should set the correct JobRequest to Rejected if a JobRequestReview is created to reject it", func(ctx context.Context) {
-				Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
+				createJobRequest(ctx, jobRequestForSuccessfulJob)
 				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
-				Expect(createJobRequest(ctx, jobRequestForSecondJob)).To(Succeed(), "Failed to create second JobRequest")
+				createJobRequest(ctx, jobRequestForSecondJob)
 				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Pending")
 
-				Expect(createJobRequestReview(ctx, jobRequestReviewRejectedForSecondJob)).To(Succeed())
+				createJobRequestReview(ctx, jobRequestReviewRejectedForSecondJob)
 				expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app-2", "Rejected")
 
 				By("verifying the other JobRequestReview is still Pending")
@@ -339,26 +339,26 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 		Context("and there is another already reviewed JobRequest, and our JobRequest is not yet reviewed", func() {
 			BeforeEach(func(ctx context.Context) {
-				Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
+				createJobRequest(ctx, jobRequestForSuccessfulJob)
 				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
-				Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
+				createJobRequestReview(ctx, jobRequestReviewApproved)
 				expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Approved")
 			})
 
 			It("should set the JobRequest to pending", func(ctx context.Context) {
-				Expect(createJobRequest(ctx, jobRequestForSecondJob)).To(Succeed(), "Failed to create JobRequest")
+				createJobRequest(ctx, jobRequestForSecondJob)
 				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Pending")
 			})
 		})
 
 		It("should create and successfully complete a job that is approved", func(ctx context.Context) {
-			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
+			createJobRequest(ctx, jobRequestForSuccessfulJob)
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
-			Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
+			createJobRequestReview(ctx, jobRequestReviewApproved)
 
 			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Approved")
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Approved")
@@ -391,11 +391,11 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("should create and successfully report a failed job that is approved", func(ctx context.Context) {
-			Expect(createJobRequest(ctx, jobRequestForFailedJob)).To(Succeed(), "Failed to create JobRequest")
+			createJobRequest(ctx, jobRequestForFailedJob)
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
-			Expect(createJobRequestReview(ctx, jobRequestReviewApproved)).To(Succeed())
+			createJobRequestReview(ctx, jobRequestReviewApproved)
 			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Approved")
 
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Approved")
@@ -419,12 +419,12 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 		})
 
 		It("should not create a job when JobRequest is rejected", func(ctx context.Context) {
-			Expect(createJobRequest(ctx, jobRequestForSuccessfulJob)).To(Succeed(), "Failed to create JobRequest")
+			createJobRequest(ctx, jobRequestForSuccessfulJob)
 
 			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Pending")
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Pending")
 
-			Expect(createJobRequestReview(ctx, jobRequestReviewRejected)).To(Succeed())
+			createJobRequestReview(ctx, jobRequestReviewRejected)
 			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Rejected")
 
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Rejected")
@@ -452,30 +452,28 @@ func getMetricsOutput(ctx context.Context, controllerNamespace string) (string, 
 	return utils.Run(cmd)
 }
 
-func createJobRequest(ctx context.Context, jobRequestFixutrePath string) error {
+func createJobRequest(ctx context.Context, jobRequestFixutrePath string) {
 	By(fmt.Sprintf("creating a JobRequest from fixture %s", jobRequestFixutrePath))
-	jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestFixutrePath)
-	if err != nil {
-		return err
-	}
+	Eventually(ctx, func(g Gomega) {
+		jobRequestFixture, err := utils.RetrieveFixtureFilePath(jobRequestFixutrePath)
+		Expect(err).NotTo(HaveOccurred(), "failed to load fixture path")
 
-	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
-	_, err = utils.Run(cmd)
-
-	return err
+		cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestFixture, "-n", appNamespace, "--as", jobRequestImpersonateUser)
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "failed to execute kubectl apply")
+	}).WithTimeout(10 * time.Second).WithPolling(500 * time.Millisecond).WithOffset(1).Should(Succeed())
 }
 
-func createJobRequestReview(ctx context.Context, jobRequestReviewFixturePath string) error {
+func createJobRequestReview(ctx context.Context, jobRequestReviewFixturePath string) {
 	By(fmt.Sprintf("creating a JobRequestReview form fixture %s", jobRequestReviewFixturePath))
-	jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewFixturePath)
-	if err != nil {
-		return err
-	}
+	Eventually(ctx, func(g Gomega) {
+		jobRequestReviewFixture, err := utils.RetrieveFixtureFilePath(jobRequestReviewFixturePath)
+		Expect(err).NotTo(HaveOccurred(), "failed to load fixture path")
 
-	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
-	_, err = utils.Run(cmd)
-
-	return err
+		cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", jobRequestReviewFixture, "-n", appNamespace, "--as", jobReviewImpersonateUser)
+		_, err = utils.Run(cmd)
+		Expect(err).NotTo(HaveOccurred(), "failed to execute kubectl apply")
+	}).WithTimeout(10 * time.Second).WithPolling(500 * time.Millisecond).WithOffset(1).Should(Succeed())
 }
 
 func expectJobRequestToBeRequestedBy(ctx context.Context, jobRequestName, userArn string) {
