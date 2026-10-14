@@ -26,7 +26,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"maps"
 	"time"
 
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -214,8 +213,9 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(new(int64(1001))))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(BeEquivalentTo("RuntimeDefault"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
-				g.Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
-				g.Expect(jobList.Items[0].Labels["fizz"]).To(Equal("buzz"))
+				g.Expect(jobList.Items[0].Annotations).NotTo(HaveKey("foo"), "We are explicitly not copying over annotations to prevent pdb from matching on them")
+				g.Expect(jobList.Items[0].Labels).NotTo(HaveKey("fizz"), "We are explicitly not copying over labels to prevent pdb from matching on them")
+				g.Expect(jobList.Items[0].Labels).NotTo(HaveKey("app"), "We are explicitly not copying over labels to prevent pdb from matching on them")
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()).NotTo(BeNil())
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(jobRequestName))
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Kind).To(Equal("JobRequest"))
@@ -280,8 +280,6 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 			jobTemplatePodSpec.Spec.RestartPolicy = v1.RestartPolicyNever
 			job.Spec.Template = jobTemplatePodSpec
 			job.Spec.BackoffLimit = new(int32(0))
-			maps.Copy(job.Annotations, targetResource.Annotations)
-			maps.Copy(job.Labels, targetResource.Labels)
 			_ = ctrl.SetControllerReference(jobRequest, job, scheme)
 
 			createJobRequestReview(ctx, k8sClient, jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
@@ -346,8 +344,9 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.FSGroup).To(Equal(new(int64(1001))))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.SecurityContext.SeccompProfile.Type).To(BeEquivalentTo("RuntimeDefault"))
 				g.Expect(jobList.Items[0].Spec.Template.Spec.RestartPolicy).To(Equal(v1.RestartPolicyNever))
-				g.Expect(jobList.Items[0].Annotations["foo"]).To(Equal("bar"))
-				g.Expect(jobList.Items[0].Labels["fizz"]).To(Equal("buzz"))
+				g.Expect(jobList.Items[0].Annotations).NotTo(HaveKey("foo"), "We are explicitly not copying over annotations to prevent pdb from matching on them")
+				g.Expect(jobList.Items[0].Labels).NotTo(HaveKey("fizz"), "We are explicitly not copying over labels to prevent pdb from matching on them")
+				g.Expect(jobList.Items[0].Labels).NotTo(HaveKey("app"), "We are explicitly not copying over labels to prevent pdb from matching on them")
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()).NotTo(BeNil())
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Name).To(Equal(jobRequestName))
 				g.Expect(jobList.Items[0].ObjectMeta.GetOwnerReferences()[0].Kind).To(Equal("JobRequest"))
@@ -674,8 +673,6 @@ func SetupJobRequestForPruneTest(ctx context.Context, pruneTestCase PruneTestCas
 		jobTemplatePodSpec.Spec.RestartPolicy = v1.RestartPolicyNever
 		job.Spec.Template = jobTemplatePodSpec
 		job.Spec.BackoffLimit = new(int32(0))
-		maps.Copy(job.Annotations, targetResource.Annotations)
-		maps.Copy(job.Labels, targetResource.Labels)
 		_ = ctrl.SetControllerReference(jobRequest, job, scheme)
 		Expect(k8sClient.Create(ctx, job)).To(Succeed())
 	}
