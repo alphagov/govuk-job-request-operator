@@ -27,7 +27,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"time"
 
@@ -276,18 +275,15 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	}
 
 	job := batch.Job{}
-	job.Labels = make(map[string]string)
-	job.Annotations = make(map[string]string)
 	job.Name = jobRequest.Name
 	job.Namespace = resource.Namespace
 	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
 	jobTemplatePodSpec.Spec.Containers = targetContainer
 	jobTemplatePodSpec.Spec.RestartPolicy = corev1.RestartPolicyNever
+	jobTemplatePodSpec.Labels = nil
+	jobTemplatePodSpec.Annotations = nil
 	job.Spec.Template = jobTemplatePodSpec
 	job.Spec.BackoffLimit = new(int32(0))
-
-	maps.Copy(job.Annotations, resource.Annotations)
-	maps.Copy(job.Labels, resource.Labels)
 
 	if err := ctrl.SetControllerReference(&jobRequest, &job, r.Scheme); err != nil {
 		r.LogError(err, "Failed to set ControllerReference on Job. Another OwnerReference has already been set.", &jobRequest)
