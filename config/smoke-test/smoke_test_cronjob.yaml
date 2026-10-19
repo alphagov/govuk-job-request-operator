@@ -16,7 +16,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: kubectl
-              image: ghcr.io/alphagov/govuk/govuk-toolbox-image:v63
+              image: ghcr.io/alphagov/govuk/govuk-toolbox-image:v65
               env:
                 - name: CGO_ENABLED
                   value: "1"
