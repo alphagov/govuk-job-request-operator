@@ -4,8 +4,24 @@
       "config:recommended",
       "helpers:pinGitHubActionDigests"
   ],
-  "enabledManagers": ["github-actions"],
+  "enabledManagers": [
+    "github-actions",
+    "custom.regex"
+  ],
   "minimumReleaseAge": "10 days",
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/.*config\\/smoke-test\\/smoke_test_cronjob\\.yaml/"
+      ],
+      "matchStrings": [
+        "ghcr.io/alphagov/govuk/govuk-toolbox-image:(?<currentValue>[0-9.]+)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "ghcr.io/alphagov/govuk/govuk-toolbox-image"
+    }
+  ],
   "packageRules": [
     {
       "matchPackageNames": ["alphagov/govuk-infrastructure"],
