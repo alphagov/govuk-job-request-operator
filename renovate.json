@@ -18,8 +18,10 @@
       "matchStrings": [
         "ghcr.io/alphagov/govuk/govuk-toolbox-image:(?<currentValue>[0-9.]+)"
       ],
-      "datasourceTemplate": "docker",
-      "depNameTemplate": "ghcr.io/alphagov/govuk/govuk-toolbox-image"
+      "packageNameTemplate": "alphagov/govuk-toolbox-image",
+      "depNameTemplate": "Toolbox image",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "github-releases"
     }
   ],
   "packageRules": [
