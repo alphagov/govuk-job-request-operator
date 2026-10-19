@@ -16,7 +16,7 @@
         "/.*config\\/smoke-test\\/smoke_test_cronjob\\.yaml/"
       ],
       "matchStrings": [
-        "ghcr.io/alphagov/govuk/govuk-toolbox-image:(?<currentValue>[0-9.]+)"
+        "ghcr.io/alphagov/govuk/govuk-toolbox-image:(?<currentValue>v[0-9.]+)"
       ],
       "packageNameTemplate": "alphagov/govuk-toolbox-image",
       "depNameTemplate": "Toolbox image",
