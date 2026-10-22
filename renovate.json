@@ -22,6 +22,32 @@
       "depNameTemplate": "Toolbox image",
       "datasourceTemplate": "github-releases",
       "versioningTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/\\.custom-gcl\\.yml/"
+      ],
+      "matchStrings": [
+        "version:\\s*(?<currentValue>v[0-9.]+)"
+      ],
+      "packageNameTemplate": "golangci/golangci-lint",
+      "depNameTemplate": "golangci-lint",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "GOLANGCI_LINT_VERSION\\s*\\?=\\s*(?<currentValue>v[0-9.]+)"
+      ],
+      "packageNameTemplate": "golangci/golangci-lint",
+      "depNameTemplate": "golangci-lint",
+      "datasourceTemplate": "github-releases",
+      "versioningTemplate": "github-releases"
     }
   ],
   "packageRules": [
