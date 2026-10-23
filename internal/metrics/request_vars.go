@@ -139,8 +139,9 @@ var (
 	)
 	JobRequestTimeTilReview = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name: "job_request_time_til_review_seconds",
-			Help: "Time until job request review",
+			Name:                        "job_request_time_til_review_seconds",
+			Help:                        "Time until job request review",
+			NativeHistogramBucketFactor: 1.1,
 		},
 		[]string{"state"},
 	)
