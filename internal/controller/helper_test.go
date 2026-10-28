@@ -181,6 +181,10 @@ func expectJobRequestToBeMalformed(ctx context.Context, k8sClient client.Client,
 	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed)
 }
 
+func expectJobRequestToBeRejected(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
+	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejected)
+}
+
 func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, expectedStates []platformv1.JobRequestState) *eventsv1.EventList {
 	By(fmt.Sprintf("Waiting for Job Request to have gone through states %v", expectedStates))
 	namespacedName := types.NamespacedName{

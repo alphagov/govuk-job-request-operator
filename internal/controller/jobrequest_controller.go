@@ -332,12 +332,6 @@ func (r *JobRequestReconciler) calculateState(ctx context.Context, jobRequest *p
 		return platformv1.JobRequestPending
 	}
 
-	r.CustomMetrics.TimeTilReview.With(
-		prometheus.Labels{
-			"state": string(jobRequest.Status.State),
-		},
-	).Observe(float64(jobRequestReviewList.Items[0].CreationTimestamp.Unix() - jobRequest.CreationTimestamp.Unix()))
-
 	return jobRequest.Status.State
 }
 
@@ -362,6 +356,13 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Approved", "None", "JobRequest is Approved")
 			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestApproved)
 			r.CustomMetrics.ApprovedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
+
+			r.CustomMetrics.TimeTilReview.With(
+				prometheus.Labels{
+					"state": string(platformv1.JobRequestApproved),
+				},
+			).Observe(float64(time.Now().Unix() - jobRequest.CreationTimestamp.Unix()))
+
 			err = r.CacheClient.Create(ctx, jobTemplate)
 			if err != nil {
 				r.LogError(err, "Failed to create Job resource", jobRequest)
@@ -399,6 +400,13 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 	case platformv1.JobRequestRejected:
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, string(platformv1.JobRequestRejected), "None", "JobRequest is Rejected")
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestRejected)
+
+		r.CustomMetrics.TimeTilReview.With(
+			prometheus.Labels{
+				"state": string(platformv1.JobRequestRejected),
+			},
+		).Observe(float64(time.Now().Unix() - jobRequest.CreationTimestamp.Unix()))
+
 		r.CustomMetrics.RejectedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 		return ctrl.Result{}, nil
 	case platformv1.JobRequestStarted:
