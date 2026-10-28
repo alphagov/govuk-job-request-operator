@@ -417,6 +417,8 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 			jobList := &batch.JobList{}
 			Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 			Expect(jobList.Items).To(BeEmpty())
+
+			expectJobRequestToBeRejected(ctx, k8sClient, jobRequest)
 		})
 
 		It("should successfully reconcile with no job created when JobRequest is 'Malformed'", func(ctx context.Context) {
