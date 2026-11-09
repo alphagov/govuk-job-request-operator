@@ -515,8 +515,10 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				"arn:aws:sts::123456789012:assumed-role/foo/bar", platformv1.JobRequestMalformed),
 			Entry("when the requested-by-annotation is a valid gds-users user it creates the JobRequest",
 				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestPending),
-			Entry("when the requested-by-annotation is a valid EntraID user it creates the JobRequest",
-				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestPending),
+			Entry("when the requested-by-annotation is a valid beta EntraID user it creates the JobRequest",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk", platformv1.JobRequestPending),
+			Entry("when the requested-by-annotation is a valid production EntraID user it creates the JobRequest",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk", platformv1.JobRequestPending),
 		)
 	})
 })
