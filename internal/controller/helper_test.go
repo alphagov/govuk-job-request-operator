@@ -135,7 +135,13 @@ func jobBuilder(jobRequest *platformv1.JobRequest) *batchv1.Job {
 		Template: v1.PodTemplateSpec{
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{
-					{Name: "container", Image: "busybox:1"},
+					{
+						Name:           "container",
+						Image:          "busybox:1",
+						LivenessProbe:  &v1.Probe{ProbeHandler: v1.ProbeHandler{}},
+						ReadinessProbe: &v1.Probe{ProbeHandler: v1.ProbeHandler{}},
+						StartupProbe:   &v1.Probe{ProbeHandler: v1.ProbeHandler{}},
+					},
 				},
 				RestartPolicy: "Never",
 			},
