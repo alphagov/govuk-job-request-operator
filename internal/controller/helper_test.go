@@ -15,6 +15,7 @@ import (
 	eventsv1 "k8s.io/api/events/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -108,6 +109,9 @@ func deploymentBuilder(resourceName, resourceNamespace string) *appsv1.Deploymen
 									Value: "bar",
 								},
 							},
+							LivenessProbe:  probeBuilder(),
+							ReadinessProbe: probeBuilder(),
+							StartupProbe:   probeBuilder(),
 							SecurityContext: &v1.SecurityContext{
 								AllowPrivilegeEscalation: new(false),
 								Capabilities: &v1.Capabilities{
@@ -135,7 +139,13 @@ func jobBuilder(jobRequest *platformv1.JobRequest) *batchv1.Job {
 		Template: v1.PodTemplateSpec{
 			Spec: v1.PodSpec{
 				Containers: []v1.Container{
-					{Name: "container", Image: "busybox:1"},
+					{
+						Name:           "container",
+						Image:          "busybox:1",
+						LivenessProbe:  probeBuilder(),
+						ReadinessProbe: probeBuilder(),
+						StartupProbe:   probeBuilder(),
+					},
 				},
 				RestartPolicy: "Never",
 			},
@@ -326,4 +336,14 @@ func expectJobRequestReviewToHaveCurrentState(ctx context.Context, k8sClient cli
 		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequestReview)).To(Succeed())
 		g.Expect(jobRequestReview.Status.State).To(Equal(currentState))
 	}).Should(Succeed())
+}
+
+func probeBuilder() *v1.Probe {
+	return &v1.Probe{
+		ProbeHandler: v1.ProbeHandler{
+			HTTPGet: &v1.HTTPGetAction{
+				Port: intstr.FromInt(8080),
+			},
+		},
+	}
 }

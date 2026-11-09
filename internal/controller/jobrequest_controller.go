@@ -279,6 +279,11 @@ func (r *JobRequestReconciler) createJobTemplate(ctx context.Context, resource *
 	job.Namespace = resource.Namespace
 	jobTemplatePodSpec := *resource.Spec.Template.DeepCopy()
 	jobTemplatePodSpec.Spec.Containers = targetContainer
+	for i := range jobTemplatePodSpec.Spec.Containers {
+		jobTemplatePodSpec.Spec.Containers[i].LivenessProbe = nil
+		jobTemplatePodSpec.Spec.Containers[i].ReadinessProbe = nil
+		jobTemplatePodSpec.Spec.Containers[i].StartupProbe = nil
+	}
 	jobTemplatePodSpec.Spec.RestartPolicy = corev1.RestartPolicyNever
 	jobTemplatePodSpec.Labels = nil
 	jobTemplatePodSpec.Annotations = nil
