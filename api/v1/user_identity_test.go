@@ -69,35 +69,44 @@ var _ = Describe("UsernameARNParser", func() {
 			UserName:  "oh.coco",
 			RoleName:  "readonly",
 			AccountId: "123456789012"}),
-		Entry("With an EntraID ARN", "arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/joe.blogs@dcms.gov.uk", NO_ERROR, &UserIdentity{
-			UserName:  "joe.blogs@dcms.gov.uk",
+		Entry("With an EntraID ARN on the beta Entra tenant", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_ReadOnlyRole_1234abcd/joe.blogs-gdsbeta.id.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "joe.blogs",
 			RoleName:  "ReadOnlyRole",
 			AccountId: "123456789012"}),
-		Entry("With an EntraID ARN a DSIT domain", "arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/joe.blogs@dsit.gov.uk", NO_ERROR, &UserIdentity{
-			UserName:  "joe.blogs@dsit.gov.uk",
+		Entry("With an EntraID ARN on the production Entra tenant", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_ReadOnlyRole_1234abcd/joe.blogs-id.internal.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "joe.blogs",
 			RoleName:  "ReadOnlyRole",
 			AccountId: "123456789012"}),
-		Entry("With an EntraID ARN a digital.cabinet-office.gov.uk domain", "arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/joe.blogs@digital.cabinet-office.gov.uk", NO_ERROR, &UserIdentity{
-			UserName:  "joe.blogs@digital.cabinet-office.gov.uk",
+		// The domain isn't 100% certain yet, it will either be id.internal.digital.gov.uk or a subdomain of it
+		Entry("With an EntraID ARN on the production Entra tenant if the name has an extra subdomain", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_ReadOnlyRole_1234abcd/joe.blogs-gds.id.internal.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "joe.blogs",
 			RoleName:  "ReadOnlyRole",
 			AccountId: "123456789012"}),
-		Entry("With an EntraID ARN with more than 2 names", "arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/joe.joey.joejoe@dcms.gov.uk", NO_ERROR, &UserIdentity{
-			UserName:  "joe.joey.joejoe@dcms.gov.uk",
+		Entry("With an EntraID ARN with more than 2 names", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_ReadOnlyRole_1234abcd/joe.joey.joejoe-id.internal.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "joe.joey.joejoe",
 			RoleName:  "ReadOnlyRole",
 			AccountId: "123456789012"}),
-		Entry("With an EntraID ARN with only 1 name", "arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/jimothy@dcms.gov.uk", NO_ERROR, &UserIdentity{
-			UserName:  "jimothy@dcms.gov.uk",
+		Entry("With an EntraID ARN with only 1 name", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_ReadOnlyRole_1234abcd/jimothy-id.internal.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "jimothy",
 			RoleName:  "ReadOnlyRole",
 			AccountId: "123456789012"}),
-		Entry("With an EntraID ARN with numbers in the name", "arn:aws:sts::123456789012:assumed-role/ReadOnlyRole/joe.blogs22@dcms.gov.uk", NO_ERROR, &UserIdentity{
-			UserName:  "joe.blogs22@dcms.gov.uk",
+		Entry("With an EntraID ARN with numbers in the name", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_ReadOnlyRole_1234abcd/joe.blogs22-id.internal.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "joe.blogs22",
 			RoleName:  "ReadOnlyRole",
 			AccountId: "123456789012"}),
-		Entry("With an EntraID ARN with a different role name", "arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs22@dcms.gov.uk", NO_ERROR, &UserIdentity{
-			UserName:  "joe.blogs22@dcms.gov.uk",
+		Entry("With an EntraID ARN with hyphes in the name", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_ReadOnlyRole_1234abcd/joe-blogs22-id.internal.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "joe-blogs22",
+			RoleName:  "ReadOnlyRole",
+			AccountId: "123456789012"}),
+		Entry("With an EntraID ARN with a different role name", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcd/joe.blogs22-id.internal.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "joe.blogs22",
 			RoleName:  "Developer",
 			AccountId: "123456789012"}),
-		Entry("With an ARN that is not an assumed-role", "arn:aws:sts::123456789012:user/jimothy@dcms.gov.uk", ERROR, nil),
+		Entry("With an EntraID ARN with a role name which includes underscores", "arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Fake_Role_1234abcd/joe.blogs22-id.internal.digital.gov.uk", NO_ERROR, &UserIdentity{
+			UserName:  "joe.blogs22",
+			RoleName:  "Fake_Role",
+			AccountId: "123456789012"}),
+		Entry("With an ARN that is not an assumed-role", "arn:aws:sts::123456789012:user/jimothy-id.internal.digital.gov.uk", ERROR, nil),
 		Entry("With an ARN that is is not either a gds-users user nor an EntraID user", "arn:aws:sts::123456789012:assumed-role/foo/bar", ERROR, nil),
 		Entry("With an ARN that is is not an sts ARN", "arn:aws:ec2::123456789012:assumed-role/joe.blogs-readonly/bar", ERROR, nil),
 		Entry("With an ARN that has an invalid account ID", "arn:aws:ec2::123456789:assumed-role/joe.blogs-readonly/bar", ERROR, nil),
