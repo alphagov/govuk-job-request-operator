@@ -184,15 +184,15 @@ func createJobRequestReview(ctx context.Context, k8sClient client.Client, reques
 }
 
 func expectJobRequestToBePending(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
-	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestPending)
+	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestPending, 2)
 }
 
 func expectJobRequestToBeMalformed(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
-	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed)
+	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed, 2)
 }
 
 func expectJobRequestToBeRejected(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
-	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejected)
+	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejected, 2)
 }
 
 func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, expectedStates []platformv1.JobRequestState) *eventsv1.EventList {
@@ -220,7 +220,7 @@ func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Cl
 		for i, expectedState := range expectedStates {
 			g.Expect(eventList.Items[i].Reason).To(Equal(string(expectedState)))
 		}
-	}).Should(Succeed())
+	}).WithOffset(1).Should(Succeed())
 
 	return eventList
 }
@@ -238,10 +238,10 @@ func expectJobRequestToHaveCurrentState(ctx context.Context, k8sClient client.Cl
 	Eventually(eventuallyCtx, func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequest)).To(Succeed())
 		g.Expect(jobRequest.Status.State).To(Equal(currentState))
-	}).Should(Succeed())
+	}).WithOffset(1).Should(Succeed())
 }
 
-func expectJobRequestToHaveFinalState(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, finalState platformv1.JobRequestState) *eventsv1.EventList {
+func expectJobRequestToHaveFinalState(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, finalState platformv1.JobRequestState, testOffset int) *eventsv1.EventList {
 	By(fmt.Sprintf("Waiting for Job Request to have reached state %s", finalState))
 	namespacedName := types.NamespacedName{
 		Name:      jobRequest.Name,
@@ -264,7 +264,7 @@ func expectJobRequestToHaveFinalState(ctx context.Context, k8sClient client.Clie
 		numberOfEvents := len(eventList.Items)
 		finalEvent := eventList.Items[numberOfEvents-1]
 		g.Expect(finalEvent.Reason).To(Equal(string(finalState)))
-	}).Should(Succeed())
+	}).WithOffset(testOffset).Should(Succeed())
 
 	return eventList
 }
@@ -277,22 +277,22 @@ func updateJobRequestStatus(ctx context.Context, k8sClient client.Client, jobReq
 }
 
 func expectJobRequestReviewToBeApproved(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview) *eventsv1.EventList {
-	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewApproved, string(platformv1.JobRequestReviewApproved))
+	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewApproved, string(platformv1.JobRequestReviewApproved), 2)
 }
 
 func expectJobRequestReviewToBeRejected(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview) *eventsv1.EventList {
-	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewRejected, string(platformv1.JobRequestReviewRejected))
+	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewRejected, string(platformv1.JobRequestReviewRejected), 2)
 }
 
 func expectJobRequestReviewToBeConflict(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview) *eventsv1.EventList {
-	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict))
+	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict), 2)
 }
 
 func expectJobRequestReviewToBeMalformed(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview) *eventsv1.EventList {
-	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewMalformed, string(platformv1.JobRequestReviewMalformed))
+	return expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewMalformed, string(platformv1.JobRequestReviewMalformed), 2)
 }
 
-func expectJobRequestReviewToHaveFinalState(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview, finalState platformv1.JobRequestReviewState, stateReason string) *eventsv1.EventList {
+func expectJobRequestReviewToHaveFinalState(ctx context.Context, k8sClient client.Client, jobRequestReview *platformv1.JobRequestReview, finalState platformv1.JobRequestReviewState, stateReason string, testOffset int) *eventsv1.EventList {
 	By(fmt.Sprintf("Waiting for Job Request Review to have reached state %s", finalState))
 	namespacedName := types.NamespacedName{
 		Name:      jobRequestReview.Name,
@@ -317,7 +317,7 @@ func expectJobRequestReviewToHaveFinalState(ctx context.Context, k8sClient clien
 
 		finalEvent := eventList.Items[numberOfEvents-1]
 		g.Expect(finalEvent.Reason).To(Equal(stateReason))
-	}).Should(Succeed())
+	}).WithOffset(testOffset).Should(Succeed())
 
 	return eventList
 }
@@ -335,7 +335,7 @@ func expectJobRequestReviewToHaveCurrentState(ctx context.Context, k8sClient cli
 	Eventually(eventuallyCtx, func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequestReview)).To(Succeed())
 		g.Expect(jobRequestReview.Status.State).To(Equal(currentState))
-	}).Should(Succeed())
+	}).WithOffset(1).Should(Succeed())
 }
 
 func probeBuilder() *v1.Probe {

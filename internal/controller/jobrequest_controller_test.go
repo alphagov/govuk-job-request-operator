@@ -264,7 +264,7 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 
 			createJobRequestReview(ctx, k8sClient, jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
 
-			eventList := expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed)
+			eventList := expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed, 1)
 			Expect(eventList.Items[1].Note).To(Equal("Job not found."))
 		})
 
@@ -373,7 +373,7 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 			job.Status = jobStatus
 			Expect(k8sClient.Status().Update(ctx, &job)).To(Succeed())
 
-			expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestFailed)
+			expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestFailed, 1)
 		})
 
 		It("should successfully reconcile if we cannot retrieve the target resource in the JobRequest from the cluster and the job should not be created", func(ctx context.Context) {
