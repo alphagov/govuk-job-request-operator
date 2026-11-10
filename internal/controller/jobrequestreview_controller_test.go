@@ -145,7 +145,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
 			expectJobRequestReviewToHaveFinalState(
-				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewNotFound, string(platformv1.JobRequestReviewNotFound),
+				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewNotFound, string(platformv1.JobRequestReviewNotFound), 1,
 			)
 		})
 
@@ -153,7 +153,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, reviewNamespaceName, containerName)
 			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
-			eventList := expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewState(""), "Pending")
+			eventList := expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewState(""), "Pending", 1)
 			Expect(eventList.Items[0].Note).To(Equal("JobRequest has no state yet"))
 
 			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
@@ -163,7 +163,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			})
 
 			expectJobRequestReviewToHaveFinalState(
-				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewApproved, string(platformv1.JobRequestReviewApproved),
+				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewApproved, string(platformv1.JobRequestReviewApproved), 1,
 			)
 		})
 
@@ -179,7 +179,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
 			expectJobRequestReviewToHaveFinalState(
-				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewMalformed, string(platformv1.JobRequestReviewMalformed),
+				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewMalformed, string(platformv1.JobRequestReviewMalformed), 1,
 			)
 		})
 
@@ -194,7 +194,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Approved")
 
 			expectJobRequestReviewToHaveFinalState(
-				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict),
+				ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict), 1,
 			)
 		})
 
@@ -257,7 +257,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 				jobRequestReview.Annotations[platformv1.JobRequestReviewReviewedByAnnotation] = reviewedByAnnotation
 				Expect(k8sClient.Create(ctx, jobRequestReview)).To(Succeed())
 
-				expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, expectedJRRStatus, string(expectedJRRStatus))
+				expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, expectedJRRStatus, string(expectedJRRStatus), 1)
 				expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, expectedJRStatus)
 			},
 			Entry("when the reviewed-by annotation is not an ARN the JobRequestReview should become Malformed",
@@ -268,8 +268,10 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 				"arn:aws:sts::123456789012:assumed-role/foo/bar", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
 			Entry("when the reviewed-by-annotation is a valid gds-users user it reviews the JobRequest",
 				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
-			Entry("when the reviewed-by-annotation is a valid EntraID user it reviews the JobRequest",
-				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+			Entry("when the reviewed-by-annotation is a valid beta EntraID user it reviews the JobRequest",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+			Entry("when the reviewed-by-annotation is a valid production EntraID user it reviews the JobRequest",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
 		)
 
 		DescribeTable("the JobRequestReview should go into Conflict state without reviewing the JobRequest if the reviewer is the same as the requester",
@@ -302,14 +304,34 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 				"arn:aws:sts::123456789012:assumed-role/joe.blogs-developer/some-session-name",
 			),
 			Entry(
-				"with identical EntraID reviewer and requester",
-				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dsit.gov.uk",
-				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dsit.gov.uk",
+				"with identical beta EntraID reviewer and requester",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk",
+			),
+			Entry(
+				"with identical production EntraID reviewer and requester",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk",
+			),
+			Entry(
+				"with the same EntraID beta and production EntraID  reviewer and requester",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk",
 			),
 			Entry(
 				"with same EntraID user but different role",
-				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dsit.gov.uk",
-				"arn:aws:sts::123456789012:assumed-role/Administrator/joe.blogs@dsit.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_ApprovedAdmin_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk",
+			),
+			Entry(
+				"with same beta EntraID user and gds-users user",
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/test-session",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk",
+			),
+			Entry(
+				"with same production EntraID user and gds-users user",
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/test-session",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk",
 			),
 		)
 
@@ -346,7 +368,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 					jobRequestReviewName, string(platformv1.JobRequestReviewRejected),
 				)
 
-				expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict))
+				expectJobRequestReviewToHaveFinalState(ctx, k8sClient, jobRequestReview, platformv1.JobRequestReviewConflict, string(platformv1.JobRequestReviewConflict), 1)
 
 				By("Validating the JobRequest was not modified by the Conflicted JobRequestReview")
 				Expect(k8sClient.Get(ctx, jobRequestNamespaceName, jobRequest)).To(Succeed())

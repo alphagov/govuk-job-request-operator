@@ -15,6 +15,11 @@ var validGDSUsersRoles = []string{
 	"-ithctester",
 }
 
+var validEntraIdUsernameSuffixes = []string{
+	"id.internal.digital.gov.uk",
+	"gdsbeta.id.digital.gov.uk",
+}
+
 type UserIdentity struct {
 	AccountId string
 	UserName  string
@@ -81,12 +86,49 @@ func parseGdsUsersARN(roleName, sessionName string) *UserIdentity {
 }
 
 func parseEntraIDArn(roleName, sessionName string) *UserIdentity {
-	if strings.Contains(sessionName, "@") {
-		return &UserIdentity{
-			UserName: sessionName,
-			RoleName: roleName,
+	friendlyRoleName := parseIdentityCenterRole(roleName)
+	username := parseIdentityCenterUsername(sessionName)
+
+	if username == "" || friendlyRoleName == "" {
+		return nil
+	}
+
+	return &UserIdentity{
+		UserName: username,
+		RoleName: friendlyRoleName,
+	}
+}
+
+func parseIdentityCenterRole(fullRoleName string) string {
+	roleParts := strings.Split(fullRoleName, "_")
+	if len(roleParts) < 3 {
+		return ""
+	}
+
+	if roleParts[0] != "AWSReservedSSO" {
+		return ""
+	}
+
+	actualRoleParts := roleParts[1 : len(roleParts)-1]
+
+	return strings.Join(actualRoleParts, "_")
+}
+
+func parseIdentityCenterUsername(sessionName string) string {
+	sessionParts := strings.Split(sessionName, "-")
+
+	if len(sessionParts) < 2 {
+		return ""
+	}
+
+	actualUsernameParts := sessionParts[0 : len(sessionParts)-1]
+	entraIdUsernameDomainPart := sessionParts[len(sessionParts)-1]
+
+	for _, validSuffix := range validEntraIdUsernameSuffixes {
+		if strings.HasSuffix(entraIdUsernameDomainPart, validSuffix) {
+			return strings.Join(actualUsernameParts, "-")
 		}
 	}
 
-	return nil
+	return ""
 }

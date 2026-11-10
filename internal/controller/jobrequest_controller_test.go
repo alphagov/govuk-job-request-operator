@@ -264,7 +264,7 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 
 			createJobRequestReview(ctx, k8sClient, jobRequestName, appNamespaceName, jobRequestReviewName, "Approved")
 
-			eventList := expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed)
+			eventList := expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed, 1)
 			Expect(eventList.Items[1].Note).To(Equal("Job not found."))
 		})
 
@@ -373,7 +373,7 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 			job.Status = jobStatus
 			Expect(k8sClient.Status().Update(ctx, &job)).To(Succeed())
 
-			expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestFailed)
+			expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestFailed, 1)
 		})
 
 		It("should successfully reconcile if we cannot retrieve the target resource in the JobRequest from the cluster and the job should not be created", func(ctx context.Context) {
@@ -515,8 +515,10 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 				"arn:aws:sts::123456789012:assumed-role/foo/bar", platformv1.JobRequestMalformed),
 			Entry("when the requested-by-annotation is a valid gds-users user it creates the JobRequest",
 				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestPending),
-			Entry("when the requested-by-annotation is a valid EntraID user it creates the JobRequest",
-				"arn:aws:sts::123456789012:assumed-role/Developer/joe.blogs@dcms.gov.uk", platformv1.JobRequestPending),
+			Entry("when the requested-by-annotation is a valid beta EntraID user it creates the JobRequest",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk", platformv1.JobRequestPending),
+			Entry("when the requested-by-annotation is a valid production EntraID user it creates the JobRequest",
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk", platformv1.JobRequestPending),
 		)
 	})
 })
