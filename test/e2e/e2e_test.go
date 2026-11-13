@@ -71,9 +71,7 @@ const (
 )
 
 var _ = Describe("govuk-job-request-operator", Ordered, func() {
-	var (
-		controllerPodName string
-	)
+	var controllerPodName string
 
 	BeforeAll(func(ctx context.Context) {
 		By("creating a govuk-replatform-test-app Deployment")
@@ -333,7 +331,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				}
 				Consistently(ctx, verifyOtherJobRequestStillInPendingState, 5*time.Second, time.Second).Should(Succeed())
 
-				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Rejected")
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "RejectedComplete")
 			})
 		})
 
@@ -429,7 +427,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Rejected")
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Rejected")
-			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Rejected")
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "RejectedComplete")
 
 			By("Job not created")
 			verifyJobNotStarted := func(g Gomega) {

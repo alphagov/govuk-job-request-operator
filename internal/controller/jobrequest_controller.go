@@ -228,6 +228,7 @@ func endReconcileIfInTerminalState(jobRequestState platformv1.JobRequestState) b
 		platformv1.JobRequestFailed,
 		platformv1.JobRequestMalformed,
 		platformv1.JobRequestConflicted,
+		platformv1.JobRequestRejectedComplete,
 	}, jobRequestState)
 }
 
@@ -404,6 +405,8 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 		}
 	case platformv1.JobRequestRejected:
 		r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, string(platformv1.JobRequestRejected), "None", "JobRequest is Rejected")
+		r.setState(ctx, jobRequest, platformv1.JobRequestRejectedComplete)
+
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestRejected)
 
 		r.CustomMetrics.TimeTilReview.With(
@@ -413,6 +416,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 		).Observe(float64(time.Now().Unix() - jobRequest.CreationTimestamp.Unix()))
 
 		r.CustomMetrics.RejectedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
+
 		return ctrl.Result{}, nil
 	case platformv1.JobRequestStarted:
 		err := r.ApiServerClient.Get(ctx, jobNamespaceName, job)
