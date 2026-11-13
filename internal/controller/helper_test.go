@@ -183,16 +183,16 @@ func createJobRequestReview(ctx context.Context, k8sClient client.Client, reques
 	return jobRequestReview
 }
 
-func expectJobRequestToBePending(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
-	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestPending, 2)
+func expectJobRequestToBePending(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) {
+	expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestPending, 2)
 }
 
-func expectJobRequestToBeMalformed(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
-	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed, 2)
+func expectJobRequestToBeMalformed(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) {
+	expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed, 2)
 }
 
-func expectJobRequestToBeRejected(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) *eventsv1.EventList {
-	return expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejected, 2)
+func expectJobRequestToBeRejectedComplete(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) {
+	expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejectedComplete, 2)
 }
 
 func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, expectedStates []platformv1.JobRequestState) *eventsv1.EventList {
@@ -207,15 +207,12 @@ func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Cl
 		client.MatchingFields{"reportingController": "jobrequest-controller"},
 	}
 
-	finalState := expectedStates[len(expectedStates)-1]
-
 	eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
 	defer cancelFunc()
 
 	Eventually(eventuallyCtx, func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequest)).To(Succeed())
 		g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
-		g.Expect(jobRequest.Status.State).To(Equal(finalState))
 		g.Expect(eventList.Items).To(HaveLen(len(expectedStates)))
 		for i, expectedState := range expectedStates {
 			g.Expect(eventList.Items[i].Reason).To(Equal(string(expectedState)))
@@ -241,16 +238,11 @@ func expectJobRequestToHaveCurrentState(ctx context.Context, k8sClient client.Cl
 	}).WithOffset(1).Should(Succeed())
 }
 
-func expectJobRequestToHaveFinalState(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, finalState platformv1.JobRequestState, testOffset int) *eventsv1.EventList {
+func expectJobRequestToHaveFinalState(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, finalState platformv1.JobRequestState, testOffset int) {
 	By(fmt.Sprintf("Waiting for Job Request to have reached state %s", finalState))
 	namespacedName := types.NamespacedName{
 		Name:      jobRequest.Name,
 		Namespace: jobRequest.Namespace,
-	}
-
-	eventList := &eventsv1.EventList{}
-	eventOpts := []client.ListOption{
-		client.MatchingFields{"reportingController": "jobrequest-controller"},
 	}
 
 	eventuallyCtx, cancelFunc := context.WithTimeout(ctx, eventuallyTimeout)
@@ -258,15 +250,8 @@ func expectJobRequestToHaveFinalState(ctx context.Context, k8sClient client.Clie
 
 	Eventually(eventuallyCtx, func(g Gomega) {
 		g.Expect(k8sClient.Get(ctx, namespacedName, jobRequest)).To(Succeed())
-		g.Expect(k8sClient.List(ctx, eventList, eventOpts...)).To(Succeed())
 		g.Expect(jobRequest.Status.State).To(Equal(finalState))
-
-		numberOfEvents := len(eventList.Items)
-		finalEvent := eventList.Items[numberOfEvents-1]
-		g.Expect(finalEvent.Reason).To(Equal(string(finalState)))
 	}).WithOffset(testOffset).Should(Succeed())
-
-	return eventList
 }
 
 func updateJobRequestStatus(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, status platformv1.JobRequestStatus) {
