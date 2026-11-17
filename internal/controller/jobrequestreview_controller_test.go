@@ -224,7 +224,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			jobRequestReview := createJobRequestReview(ctx, k8sClient, jobRequestName, reviewNamespaceName, jobRequestReviewName, "Rejected")
 
 			expectJobRequestReviewToBeRejected(ctx, k8sClient, jobRequestReview)
-			expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejected)
+			expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejecting)
 
 			Expect(jobRequest.HasBeenRejected()).To(BeTrue())
 			Expect(jobRequest.WasReviewedBy(jobRequestReview)).To(BeTrue())
@@ -267,11 +267,11 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 			Entry("when the reviewed-by-annotation is not a valid gds-users role or EntraID user the JobRequestReview should become Malformed",
 				"arn:aws:sts::123456789012:assumed-role/foo/bar", platformv1.JobRequestReviewMalformed, platformv1.JobRequestPending),
 			Entry("when the reviewed-by-annotation is a valid gds-users user it reviews the JobRequest",
-				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+				"arn:aws:sts::123456789012:assumed-role/joe.blogs-platformengineer/session-name", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejecting),
 			Entry("when the reviewed-by-annotation is a valid beta EntraID user it reviews the JobRequest",
-				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-gdsbeta.id.digital.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejecting),
 			Entry("when the reviewed-by-annotation is a valid production EntraID user it reviews the JobRequest",
-				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejected),
+				"arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Developer_1234abcde/joe.blogs-id.internal.digital.gov.uk", platformv1.JobRequestReviewRejected, platformv1.JobRequestRejecting),
 		)
 
 		DescribeTable("the JobRequestReview should go into Conflict state without reviewing the JobRequest if the reviewer is the same as the requester",
@@ -351,7 +351,7 @@ var _ = Describe("JobRequestReview Controller", Ordered, ContinueOnFailure, func
 					string(previousJobRequestReviewState),
 				)
 
-				expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, platformv1.JobRequestState(string(previousJobRequestReviewState)))
+				expectJobRequestToHaveCurrentState(ctx, k8sClient, jobRequest, SetJobRequestState(previousJobRequestReviewState))
 				expectJobRequestReviewToHaveCurrentState(ctx, k8sClient, previousJobRequestReview, previousJobRequestReviewState)
 
 				updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{

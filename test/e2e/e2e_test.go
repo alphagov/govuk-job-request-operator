@@ -331,7 +331,7 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 				}
 				Consistently(ctx, verifyOtherJobRequestStillInPendingState, 5*time.Second, time.Second).Should(Succeed())
 
-				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "RejectedComplete")
+				expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app-2", "Rejected")
 			})
 		})
 
@@ -426,8 +426,9 @@ var _ = Describe("govuk-job-request-operator", Ordered, func() {
 			expectJobRequestReviewToBeInState(ctx, "jrr-jr-govuk-replatform-test-app", "Rejected")
 
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequestReview", "Rejected")
+			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Rejecting")
 			expectResourceToHaveEventEmittedForState(ctx, "JobRequest", "Rejected")
-			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "RejectedComplete")
+			expectJobRequestToBeInState(ctx, "jr-govuk-replatform-test-app", "Rejected")
 
 			By("Job not created")
 			verifyJobNotStarted := func(g Gomega) {

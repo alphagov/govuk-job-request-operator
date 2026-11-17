@@ -146,7 +146,7 @@ func (r *JobRequestReviewReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return result, err
 	}
 
-	r.LogReconcillationExit(ReconcilliationFinished, "Handled state of JobRequestReview succesfully.", jobRequestReview, nil)
+	r.LogReconcillationExit(ReconcilliationFinished, "Handled state of JobRequestReview successfully.", jobRequestReview, nil)
 	r.CustomMetrics.SuccessfulReconcileTotal.With(r.CustomMetrics.MetricLabels).Inc()
 	return result, nil
 }
@@ -291,7 +291,7 @@ func (r *JobRequestReviewReconciler) validateReviewerAndRequesterDiffer(ctx cont
 	}
 
 	if reviewer.UserName == requester.UserName {
-		errorMessage := "JobRequestReview reveiwer is the same as JobRequest requester. A user cannot review their own request"
+		errorMessage := "JobRequestReview reviewer is the same as JobRequest requester. A user cannot review their own request"
 		r.LogInfo(
 			errorMessage, jobRequestReview,
 			"jobRequestName", jobRequest.Name,
@@ -316,7 +316,7 @@ func (r *JobRequestReviewReconciler) handleReviewDecision(ctx context.Context, j
 		return ctrl.Result{}, err
 	}
 
-	jobRequest.Status.State = platformv1.JobRequestState(jobRequestReview.Spec.Decision)
+	jobRequest.Status.State = SetJobRequestState(platformv1.JobRequestReviewState(jobRequestReview.Spec.Decision))
 	jobRequest.Status.ReviewName = jobRequestReview.Name
 
 	r.Recorder.Eventf(jobRequestReview, nil, corev1.EventTypeNormal, jobRequestReview.Spec.Decision, "None",
@@ -395,7 +395,7 @@ func (r *JobRequestReviewReconciler) handleState(ctx context.Context, jobRequest
 	case platformv1.JobRequestPending:
 		return r.handleReviewDecision(ctx, jobRequest, jobRequestReview)
 
-	case platformv1.JobRequestRejected, platformv1.JobRequestApproved, platformv1.JobRequestStarted, platformv1.JobRequestComplete, platformv1.JobRequestFailed:
+	case platformv1.JobRequestRejecting, platformv1.JobRequestRejected, platformv1.JobRequestApproved, platformv1.JobRequestStarted, platformv1.JobRequestComplete, platformv1.JobRequestFailed:
 		if jobRequest.WasReviewedBy(jobRequestReview) {
 			return ctrl.Result{}, nil
 		}
@@ -459,4 +459,14 @@ func (r *JobRequestReviewReconciler) SetupControllerWithManager(mgr ctrl.Manager
 		For(&platformv1.JobRequestReview{}).
 		Named("jobrequestreview").
 		Complete(r)
+}
+
+func SetJobRequestState(decision platformv1.JobRequestReviewState) platformv1.JobRequestState {
+	jobRequestState := string(decision)
+
+	if decision == platformv1.JobRequestReviewRejected {
+		jobRequestState = "Rejecting"
+	}
+
+	return platformv1.JobRequestState(jobRequestState)
 }
