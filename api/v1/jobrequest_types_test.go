@@ -7,8 +7,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const jobRequestName string = "test-job-request"
-const jobRequestReviewName string = "test-job-request-review"
+const (
+	jobRequestName       string = "test-job-request"
+	jobRequestReviewName string = "test-job-request-review"
+)
 
 func jobRequestWithState(state JobRequestState, reviewedBy string) *JobRequest {
 	return &JobRequest{
@@ -98,6 +100,12 @@ var _ = Describe("JobRequest", Ordered, func() {
 			Expect(jobRequest.HasBeenRejected()).To(BeTrue())
 		})
 
+		It("returns true if the JobRequest has been RejectedComplete", func() {
+			jobRequest := jobRequestWithState(JobRequestRejectedComplete, jobRequestReviewName)
+
+			Expect(jobRequest.HasBeenRejected()).To(BeTrue())
+		})
+
 		DescribeTable("returns false for states",
 			func(state JobRequestState) {
 				jobRequest := jobRequestWithState(state, jobRequestReviewName)
@@ -126,6 +134,7 @@ var _ = Describe("JobRequest", Ordered, func() {
 			},
 			Entry("when the JobRequest is in state Pending", JobRequestPending),
 			Entry("when the JobRequest is in state Rejected", JobRequestRejected),
+			Entry("when the JobRequest is in state RejectedComplete", JobRequestRejectedComplete),
 			Entry("when the JobRequest is in state Malformed", JobRequestMalformed),
 		)
 
@@ -164,6 +173,7 @@ var _ = Describe("JobRequest", Ordered, func() {
 			},
 			Entry("when the JobRequest is in state Approved", JobRequestApproved),
 			Entry("when the JobRequest is in state Rejected", JobRequestRejected),
+			Entry("when the JobRequest is in state RejectedComplete", JobRequestRejectedComplete),
 			Entry("when the JobRequest is in state Started", JobRequestStarted),
 			Entry("when the JobRequest is in state Complete", JobRequestComplete),
 			Entry("when the JobRequest is in state Failed", JobRequestFailed),
