@@ -349,7 +349,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 	}
 
 	switch jobRequestState {
-	case platformv1.JobRequestComplete:
+	case platformv1.JobRequestRejectedComplete:
 		r.setState(ctx, jobRequest, platformv1.JobRequestRejected)
 		return ctrl.Result{}, nil
 
