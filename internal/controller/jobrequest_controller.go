@@ -349,10 +349,6 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 	}
 
 	switch jobRequestState {
-	case platformv1.JobRequestRejectedComplete:
-		r.setState(ctx, jobRequest, platformv1.JobRequestRejected)
-		return ctrl.Result{}, nil
-
 	case platformv1.JobRequestPending:
 		r.setState(ctx, jobRequest, platformv1.JobRequestPending)
 		r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestPending)
