@@ -191,8 +191,8 @@ func expectJobRequestToBeMalformed(ctx context.Context, k8sClient client.Client,
 	expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestMalformed, 2)
 }
 
-func expectJobRequestToBeRejectedComplete(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) {
-	expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejectedComplete, 2)
+func expectJobRequestToBeRejected(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest) {
+	expectJobRequestToHaveFinalState(ctx, k8sClient, jobRequest, platformv1.JobRequestRejected, 2)
 }
 
 func expectJobRequestToHaveStateHistory(ctx context.Context, k8sClient client.Client, jobRequest *platformv1.JobRequest, expectedStates []platformv1.JobRequestState) *eventsv1.EventList {

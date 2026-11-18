@@ -100,8 +100,8 @@ var _ = Describe("JobRequest", Ordered, func() {
 			Expect(jobRequest.HasBeenRejected()).To(BeTrue())
 		})
 
-		It("returns true if the JobRequest has been RejectedComplete", func() {
-			jobRequest := jobRequestWithState(JobRequestRejectedComplete, jobRequestReviewName)
+		It("returns true if the JobRequest has is currently rejecting", func() {
+			jobRequest := jobRequestWithState(JobRequestRejecting, jobRequestReviewName)
 
 			Expect(jobRequest.HasBeenRejected()).To(BeTrue())
 		})
@@ -134,7 +134,7 @@ var _ = Describe("JobRequest", Ordered, func() {
 			},
 			Entry("when the JobRequest is in state Pending", JobRequestPending),
 			Entry("when the JobRequest is in state Rejected", JobRequestRejected),
-			Entry("when the JobRequest is in state RejectedComplete", JobRequestRejectedComplete),
+			Entry("when the JobRequest is in state Rejecting", JobRequestRejecting),
 			Entry("when the JobRequest is in state Malformed", JobRequestMalformed),
 		)
 
@@ -173,7 +173,7 @@ var _ = Describe("JobRequest", Ordered, func() {
 			},
 			Entry("when the JobRequest is in state Approved", JobRequestApproved),
 			Entry("when the JobRequest is in state Rejected", JobRequestRejected),
-			Entry("when the JobRequest is in state RejectedComplete", JobRequestRejectedComplete),
+			Entry("when the JobRequest is in state Rejecting", JobRequestRejecting),
 			Entry("when the JobRequest is in state Started", JobRequestStarted),
 			Entry("when the JobRequest is in state Complete", JobRequestComplete),
 			Entry("when the JobRequest is in state Failed", JobRequestFailed),

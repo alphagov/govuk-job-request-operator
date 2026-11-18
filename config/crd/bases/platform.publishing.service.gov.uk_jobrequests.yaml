@@ -121,7 +121,7 @@ spec:
                 - Failed
                 - Malformed
                 - Conflicted
-                - RejectedComplete
+                - Rejecting
                 type: string
             type: object
         required:

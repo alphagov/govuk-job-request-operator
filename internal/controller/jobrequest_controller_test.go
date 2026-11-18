@@ -410,20 +410,20 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 			Expect(jobList.Items).To(BeEmpty())
 		})
 
-		It("should successfully reconcile when JobRequest is 'RejectedComplete' and exit early as it's in a terminal state", func(ctx context.Context) {
+		It("should successfully reconcile when JobRequest is 'Rejected' and exit early as it's in a terminal state", func(ctx context.Context) {
 			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, appNamespaceName, containerName)
 
 			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
-				State:      platformv1.JobRequestRejectedComplete,
+				State:      platformv1.JobRequestRejected,
 				ReviewName: "test",
 			})
 
 			expectJobRequestToHaveStateHistory(ctx, k8sClient, jobRequest, []platformv1.JobRequestState{})
 
-			expectJobRequestToBeRejectedComplete(ctx, k8sClient, jobRequest)
+			expectJobRequestToBeRejected(ctx, k8sClient, jobRequest)
 		})
 
-		It("should successfully reconcile when JobRequest is 'Rejected' and the job should not be created", func(ctx context.Context) {
+		It("should successfully reconcile when JobRequest is 'Rejecting' and the job should not be created", func(ctx context.Context) {
 			jobRequest := createJobRequest(ctx, k8sClient, jobRequestName, deploymentName, appNamespaceName, containerName)
 
 			expectJobRequestToBePending(ctx, k8sClient, jobRequest)
@@ -431,20 +431,20 @@ var _ = Describe("JobRequest Controller", Ordered, ContinueOnFailure, func() {
 			createJobRequestReview(ctx, k8sClient, jobRequestName, appNamespaceName, jobRequestReviewName, "Rejected")
 
 			updateJobRequestStatus(ctx, k8sClient, jobRequest, platformv1.JobRequestStatus{
-				State:      platformv1.JobRequestRejected,
+				State:      platformv1.JobRequestRejecting,
 				ReviewName: "test",
-			})
-
-			expectJobRequestToHaveStateHistory(ctx, k8sClient, jobRequest, []platformv1.JobRequestState{
-				platformv1.JobRequestPending,
-				platformv1.JobRequestRejected,
 			})
 
 			jobList := &batch.JobList{}
 			Expect(k8sClient.List(ctx, jobList, jobOpts...)).To(Succeed())
 			Expect(jobList.Items).To(BeEmpty())
 
-			expectJobRequestToBeRejectedComplete(ctx, k8sClient, jobRequest)
+			expectJobRequestToBeRejected(ctx, k8sClient, jobRequest)
+			expectJobRequestToHaveStateHistory(ctx, k8sClient, jobRequest, []platformv1.JobRequestState{
+				platformv1.JobRequestPending,
+				platformv1.JobRequestRejecting,
+				platformv1.JobRequestRejected,
+			})
 		})
 
 		It("should successfully reconcile with no job created when JobRequest is 'Malformed'", func(ctx context.Context) {
@@ -626,7 +626,7 @@ var _ = Describe("JobRequest Pruning", Ordered, ContinueOnFailure, func() {
 	for _, pruneTestCase := range []PruneTestCase{
 		{InitialState: platformv1.JobRequestPending, ExpectedState: platformv1.JobRequestPending, Reviewed: false, JobLaunched: false},
 		{InitialState: platformv1.JobRequestApproved, ExpectedState: platformv1.JobRequestStarted, Reviewed: true, JobLaunched: false},
-		{InitialState: platformv1.JobRequestRejected, ExpectedState: platformv1.JobRequestRejectedComplete, Reviewed: true, JobLaunched: false},
+		{InitialState: platformv1.JobRequestRejected, ExpectedState: platformv1.JobRequestRejected, Reviewed: true, JobLaunched: false},
 		{InitialState: platformv1.JobRequestStarted, ExpectedState: platformv1.JobRequestStarted, Reviewed: true, JobLaunched: true},
 		{InitialState: platformv1.JobRequestComplete, ExpectedState: platformv1.JobRequestComplete, Reviewed: true, JobLaunched: true},
 		{InitialState: platformv1.JobRequestFailed, ExpectedState: platformv1.JobRequestFailed, Reviewed: true, JobLaunched: false},
