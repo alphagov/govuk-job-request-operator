@@ -236,7 +236,7 @@ The release process works as follows:
    4. Creates a GitHub Release with the packaged binary and creates a changelog based on commits since last release
    5. Builds a container image
 4. `make push-helm-chart` runs, which generates, packages and pushes the Helm chart
-5. Over in [govuk-helm-charts](https://github.com/alphagov/govuk-helm-charts/blob/main/charts/app-config/helm-versions/) update the helm-versions for each environment and argo will roll out the new versions
+5. Over in [govuk-helm-charts](https://github.com/alphagov/govuk-helm-charts/blob/main/charts/app-config/helm-versions/) update the helm-versions for each environment and argo will roll out the new versions. Alternatively, you can wait for renovate to raise the PR for you in rthe govuk-helm-charts repo. The benefit of this approach is that you can approve and merge the PR in yourself. The [cron runs hourly](https://github.com/alphagov/govuk-helm-charts/blob/05b2781851690368673ea56bf4cc24efe07bcd51/charts/renovate/templates/cronjob.yaml#L8).
 
 ## Team
 
