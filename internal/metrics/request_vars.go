@@ -1,6 +1,10 @@
 package metrics
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+)
 
 var (
 	vectorLabels = []string{"namespaced_name", "state"}
@@ -139,9 +143,11 @@ var (
 	)
 	JobRequestTimeTilReview = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:                        "job_request_time_til_review_seconds",
-			Help:                        "Time until job request review",
-			NativeHistogramBucketFactor: 1.1,
+			Name:                            "job_request_time_til_review_seconds",
+			Help:                            "Time until job request review",
+			NativeHistogramBucketFactor:     1.1,
+			NativeHistogramMaxBucketNumber:  12,
+			NativeHistogramMinResetDuration: time.Hour * 1,
 		},
 		[]string{"state"},
 	)

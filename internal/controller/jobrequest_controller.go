@@ -172,7 +172,7 @@ func (r *JobRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		jobRequest, nil, "state", jobRequest.Status.State,
 	)
 	r.CustomMetrics.MetricLabels["state"] = string(jobRequest.Status.State)
-	r.CustomMetrics.SuccessfulReconcileTotal.With(r.CustomMetrics.MetricLabels)
+	r.CustomMetrics.SuccessfulReconcileTotal.With(r.CustomMetrics.MetricLabels).Inc()
 	return result, nil
 }
 
@@ -436,7 +436,7 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 
 			r.setState(ctx, jobRequest, platformv1.JobRequestMalformed)
 			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestMalformed)
-			r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels)
+			r.CustomMetrics.MalformedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 			return ctrl.Result{}, nil
 		}
 
