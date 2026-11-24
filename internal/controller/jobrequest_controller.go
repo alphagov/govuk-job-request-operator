@@ -361,11 +361,13 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 		case err != nil && apierrors.IsNotFound(err): // Job not found; happy path
 			r.Recorder.Eventf(jobRequest, nil, corev1.EventTypeNormal, "Approved", "None", "JobRequest is Approved")
 			r.CustomMetrics.MetricLabels["state"] = string(platformv1.JobRequestApproved)
+
 			r.CustomMetrics.ApprovedStateTotal.With(r.CustomMetrics.MetricLabels).Inc()
 
 			r.CustomMetrics.TimeTilReview.With(
 				prometheus.Labels{
-					"state": string(platformv1.JobRequestApproved),
+					"state":     string(platformv1.JobRequestApproved),
+					"namespace": jobRequest.Namespace,
 				},
 			).Observe(float64(time.Now().Unix() - jobRequest.CreationTimestamp.Unix()))
 
@@ -414,7 +416,8 @@ func (r *JobRequestReconciler) handleState(ctx context.Context, jobRequestState 
 
 		r.CustomMetrics.TimeTilReview.With(
 			prometheus.Labels{
-				"state": string(platformv1.JobRequestRejected),
+				"state":     string(platformv1.JobRequestRejected),
+				"namespace": jobRequest.Namespace,
 			},
 		).Observe(float64(time.Now().Unix() - jobRequest.CreationTimestamp.Unix()))
 

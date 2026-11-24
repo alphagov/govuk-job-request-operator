@@ -149,6 +149,6 @@ var (
 			NativeHistogramMaxBucketNumber:  12,
 			NativeHistogramMinResetDuration: time.Hour * 1,
 		},
-		[]string{"state"},
+		[]string{"state", "namespace"},
 	)
 )
